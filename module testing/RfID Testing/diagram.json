@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "author": "Om Patil",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": -119.96, "attrs": {} },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd1",
+      "top": -89.6,
+      "left": 130.4,
+      "attrs": { "pins": "i2c" }
+    },
+    { "type": "board-mfrc522", "id": "rfid1", "top": -156.25, "left": -140.56, "attrs": {} },
+    { "type": "wokwi-microsd-card", "id": "sd1", "top": -47.77, "left": -268.73, "attrs": {} },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": 284.4,
+      "left": -188.2,
+      "attrs": { "color": "red" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 284.4,
+      "left": -130.6,
+      "attrs": { "color": "green" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 175.2,
+      "left": 69,
+      "attrs": { "volume": "0.1" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "lcd1:SDA", "esp:21", "green", [ "v115.4", "h-28.8" ] ],
+    [ "lcd1:SCL", "esp:22", "green", [ "h-19.2", "v77.1" ] ],
+    [ "rfid1:RST", "esp:27", "yellow", [ "h-19.2", "v182.4" ] ],
+    [ "rfid1:MISO", "esp:19", "yellow", [ "h144", "v182.4" ] ],
+    [ "rfid1:MOSI", "esp:23", "yellow", [ "h172.8", "v134.4" ] ],
+    [ "rfid1:3.3V", "esp:3V3", "green", [ "h0" ] ],
+    [ "rfid1:GND", "esp:GND.1", "yellow", [ "v220.8" ] ],
+    [ "rfid1:SDA", "esp:5", "yellow", [ "h0" ] ],
+    [ "rfid1:SCK", "esp:18", "yellow", [ "h163.2", "v211.2" ] ],
+    [ "sd1:GND", "esp:GND.1", "cyan", [ "h9.6", "v172.91" ] ],
+    [ "sd1:VCC", "esp:3V3", "cyan", [ "v0.14", "h76.65" ] ],
+    [ "sd1:CS", "esp:13", "cyan", [ "v144.06" ] ],
+    [ "sd1:SCK", "esp:18", "cyan", [ "h28.8", "v115.19" ] ],
+    [ "sd1:DI", "esp:23", "cyan", [ "v-0.09", "h192", "v28.8" ] ],
+    [ "sd1:DO", "esp:19", "cyan", [ "h211.2", "v124.91", "h-38.4" ] ],
+    [ "led1:A", "esp:25", "magenta", [ "h19.2", "v-220.8" ] ],
+    [ "led2:A", "esp:26", "magenta", [ "h19.2", "v-211.2" ] ],
+    [ "bz1:2", "esp:33", "white", [ "h38", "v-163.2" ] ],
+    [ "bz1:1", "esp:GND.1", "white", [ "h-38.4", "v-105.6" ] ],
+    [ "led1:C", "esp:GND.1", "magenta", [ "h-38", "v-172.8" ] ],
+    [ "led2:C", "esp:GND.1", "magenta", [ "h-18.8", "v-172.8" ] ]
+  ],
+  "dependencies": {}
+}
