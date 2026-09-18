@@ -1,17 +1,10 @@
 [project]
 name = "evilog"
 version = "0.1.0"
-description = "Add your description here"
+description = "EviLog prototype project"
 readme = "README.md"
-authors = [
-    { name = "Om Patil", email = "44ompatil@gmail.com" }
-]
 requires-python = ">=3.12"
-dependencies = []
-
-[project.scripts]
-evilog = "evilog:main"
 
 [build-system]
-requires = ["uv_build>=0.12.10,<0.13.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
