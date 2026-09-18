@@ -1,0 +1,6 @@
+# EviLog backend dependencies
+fastapi
+uvicorn[standard]
+pydantic
+pymongo
+python-dotenv
