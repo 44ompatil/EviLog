@@ -1,1 +1,35 @@
-"""Service layer for future EviLog business logic."""
+from .evilog_service import (
+    ServiceError,
+    assign_rfid_to_evidence,
+    create_case,
+    create_evidence,
+    create_officer,
+    get_case,
+    get_evidence,
+    get_officer,
+    get_rfid_tag,
+    list_cases,
+    list_evidence,
+    list_officers,
+    list_rfid_tags,
+    register_rfid_tag,
+    release_rfid_from_evidence,
+)
+
+__all__ = [
+    "ServiceError",
+    "create_case",
+    "get_case",
+    "list_cases",
+    "create_evidence",
+    "get_evidence",
+    "list_evidence",
+    "create_officer",
+    "get_officer",
+    "list_officers",
+    "register_rfid_tag",
+    "get_rfid_tag",
+    "list_rfid_tags",
+    "assign_rfid_to_evidence",
+    "release_rfid_from_evidence",
+]
