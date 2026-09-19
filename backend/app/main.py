@@ -5,9 +5,17 @@ import logging
 from fastapi import FastAPI
 
 from app.database import initialize_database, verify_database
+from app.routers.cases import router as cases_router
+from app.routers.evidence import router as evidence_router
+from app.routers.officers import router as officers_router
+from app.routers.rfid import router as rfid_router
 
 logger = logging.getLogger("evilog")
 app = FastAPI(title="EviLog API", version="0.1.0")
+app.include_router(cases_router)
+app.include_router(evidence_router)
+app.include_router(officers_router)
+app.include_router(rfid_router)
 
 
 @app.on_event("startup")
