@@ -50,3 +50,11 @@ datasets/test/*
 .pytest_cache/
 .coverage
 htmlcov/
+
+/app/
+/notebooks/
+/scripts/
+/tests/
+/datasets/
+
+*.env
