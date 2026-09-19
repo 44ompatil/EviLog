@@ -44,6 +44,9 @@ class FakeDatabase:
             "officers": FakeCollection(),
             "rfid_tags": FakeCollection(),
             "rfid_mappings": FakeCollection(),
+            "transactions": FakeCollection(),
+            "chain_of_custody": FakeCollection(),
+            "security_alerts": FakeCollection(),
         }
 
     def __getitem__(self, name):
@@ -55,7 +58,7 @@ def client():
     fake_db = FakeDatabase()
     with patch("app.main.initialize_database"), patch("app.main.verify_database"), patch(
         "app.services.evilog_service.get_database", return_value=fake_db
-    ):
+    ), patch("app.services.event_processing_service.get_database", return_value=fake_db):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -232,3 +235,98 @@ def test_rfid_api_lifecycle_and_validation(client):
 
     bad_release = client.post("/api/rfid/release", json={"rfid_id": "RFID-404", "evidence_id": "EV-999"})
     assert bad_release.status_code == 404
+
+
+def test_hardware_event_processing_valid_and_invalid(client):
+    case_payload = {
+        "case_id": "CASE-500",
+        "fir_number": "FIR-500",
+        "case_title": "Hardware event validation",
+        "description": "Testing event pipeline",
+        "case_type": "criminal",
+        "status": "open",
+        "created_at": "2025-02-01T09:00:00",
+    }
+    assert client.post("/api/cases", json=case_payload).status_code == 201
+
+    evidence_payload = {
+        "evidence_id": "EV-500",
+        "case_id": "CASE-500",
+        "evidence_name": "Laptop",
+        "evidence_type": "digital",
+        "description": "For hardware event validation",
+        "status": "stored",
+        "registered_at": "2025-02-01T10:00:00",
+    }
+    assert client.post("/api/evidence", json=evidence_payload).status_code == 201
+
+    officer_payload = {
+        "officer_id": "OF-500",
+        "name": "Aisha Ali",
+        "badge_number": "BADGE-500",
+        "role": "Investigator",
+        "status": "active",
+        "registered_at": "2025-02-01T08:30:00",
+    }
+    assert client.post("/api/officers", json=officer_payload).status_code == 201
+
+    rfid_payload = {
+        "rfid_id": "RFID-500",
+        "status": "available",
+        "registered_at": "2025-02-01T11:00:00",
+    }
+    assert client.post("/api/rfid", json=rfid_payload).status_code == 201
+    assert client.post("/api/rfid/assign", json={"rfid_id": "RFID-500", "evidence_id": "EV-500", "assigned_to": "EV-500"}).status_code == 200
+
+    valid_event = client.post(
+        "/api/hardware/events",
+        json={
+            "officer_id": "OF-500",
+            "rfid_id": "RFID-500",
+            "event_type": "access",
+            "timestamp": "2025-02-01T12:00:00",
+        },
+    )
+    assert valid_event.status_code == 200
+    body = valid_event.json()
+    assert body["status"] == "processed"
+    assert body["transaction"]["evidence_id"] == "EV-500"
+    assert body["chain_of_custody"]["evidence_id"] == "EV-500"
+    assert body["transaction"]["officer_id"] == "OF-500"
+    assert body["chain_of_custody"]["officer_id"] == "OF-500"
+
+    invalid_officer = client.post(
+        "/api/hardware/events",
+        json={
+            "officer_id": "OF-999",
+            "rfid_id": "RFID-500",
+            "event_type": "access",
+            "timestamp": "2025-02-01T12:05:00",
+        },
+    )
+    assert invalid_officer.status_code == 400
+    assert invalid_officer.json()["status"] == "alert_created"
+
+    invalid_event = client.post(
+        "/api/hardware/events",
+        json={
+            "officer_id": "OF-500",
+            "rfid_id": "RFID-500",
+            "event_type": "unsupported_action",
+            "timestamp": "2025-02-01T12:10:00",
+        },
+    )
+    assert invalid_event.status_code == 400
+    assert invalid_event.json()["status"] == "alert_created"
+
+    missing_rfid = client.post(
+        "/api/hardware/events",
+        json={
+            "officer_id": "OF-500",
+            "rfid_id": "RFID-EMPTY",
+            "event_type": "access",
+            "timestamp": "2025-02-01T12:15:00",
+        },
+    )
+    assert missing_rfid.status_code == 400
+    assert missing_rfid.json()["status"] == "alert_created"

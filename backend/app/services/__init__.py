@@ -15,9 +15,17 @@ from .evilog_service import (
     register_rfid_tag,
     release_rfid_from_evidence,
 )
+from .event_processing_service import (
+    HardwareEventError,
+    create_security_alert,
+    create_transaction_and_custody,
+    process_hardware_event,
+    validate_hardware_event,
+)
 
 __all__ = [
     "ServiceError",
+    "HardwareEventError",
     "create_case",
     "get_case",
     "list_cases",
@@ -32,4 +40,8 @@ __all__ = [
     "list_rfid_tags",
     "assign_rfid_to_evidence",
     "release_rfid_from_evidence",
+    "validate_hardware_event",
+    "create_security_alert",
+    "create_transaction_and_custody",
+    "process_hardware_event",
 ]
