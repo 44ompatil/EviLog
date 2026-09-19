@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment variables & secrets
+.env
+
+# Raw Biometric Personal Data & captures
+datasets/enrollment/*
+!datasets/enrollment/.gitkeep
+datasets/validation/*
+!datasets/validation/genuine/.gitkeep
+!datasets/validation/impostor/.gitkeep
+datasets/test/*
+!datasets/test/genuine/.gitkeep
+!datasets/test/impostor/.gitkeep
+*.jpg
+*.jpeg
+*.png
+!assets/*
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/

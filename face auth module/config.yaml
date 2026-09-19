@@ -1,0 +1,48 @@
+# EviLog AI Officer Authentication Configuration
+
+camera:
+  index: 0
+  width: 640
+  height: 480
+  fps: 15
+
+face_detection:
+  model_path: "models/detector/yunet.onnx"
+  confidence_threshold: 0.60
+  minimum_face_size: 80
+  nms_threshold: 0.30
+
+quality:
+  blur_threshold: 0.0
+  min_brightness: 40.0
+  max_brightness: 220.0
+  max_pose_angle_deg: 35.0
+
+recognition:
+  model_name: "sface"
+  model_version: "1.0.0"
+  model_path: "models/recognition/sface.onnx"
+  embedding_dimension: 128
+  preprocessing_version: "1.0.0"
+  similarity_metric: "cosine"
+  match_threshold: 0.78
+  low_confidence_margin: 0.08
+  required_consistent_frames: 3
+
+database:
+  mongodb_uri: "mongodb://localhost:27017"
+  database_name: "evilog"
+  server_selection_timeout_ms: 2000
+  allow_mock_fallback: true
+
+authentication:
+  require_rfid_match: true
+  require_active_officer: true
+  multiple_faces_allowed: false
+  device_id: "EVILOG-001"
+  location: "EVIDENCE_STORE_A"
+
+enrollment:
+  sample_count: 5
+  min_consistency_similarity: 0.70
+  save_raw_images: false
