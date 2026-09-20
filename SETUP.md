@@ -52,7 +52,7 @@ EviLog/backend/.env
 contents:
 
 ```env
-MONGODB_URL=mongodb+srv://vedantadsul2007_db_user:6DF0cBooEEhsG2Jj@evilog.8qhihpm.mongodb.net/
+MONGODB_URL=<Connection String>
 DATABASE_NAME=evilog
 ```
 
@@ -175,7 +175,7 @@ pip install -r requirements.txt
 cd backend
 copy NUL .env
 # then add:
-# MONGODB_URL=mongodb+srv://vedantadsul2007_db_user:6DF0cBooEEhsG2Jj@evilog.8qhihpm.mongodb.net/
+# MONGODB_URL=<Connection String>
 # DATABASE_NAME=evilog
 
 start "Backend" cmd /k "cd /d D:\COLLEGE\Projects\EviLog\backend && uvicorn app.main:app --reload"
