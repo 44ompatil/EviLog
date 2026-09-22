@@ -22,6 +22,8 @@ from .event_processing_service import (
     process_hardware_event,
     validate_hardware_event,
 )
+from .face_auth_service import FaceAuthError, authenticate_face, cosine_similarity, match_embedding_to_officer
+
 
 __all__ = [
     "ServiceError",
@@ -44,4 +46,8 @@ __all__ = [
     "create_security_alert",
     "create_transaction_and_custody",
     "process_hardware_event",
+    "FaceAuthError",
+    "authenticate_face",
+    "cosine_similarity",
+    "match_embedding_to_officer",
 ]

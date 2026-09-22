@@ -1,0 +1,98 @@
+const iconClassName = 'h-4 w-4 shrink-0';
+
+function DashboardIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="4" rx="1.5" />
+      <rect x="14" y="11" width="7" height="10" rx="1.5" />
+      <rect x="3" y="12" width="7" height="9" rx="1.5" />
+    </svg>
+  )
+}
+
+function CasesIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M8 4.5h8l2 3V18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2Z" />
+      <path d="M8 4.5v4h8v-4" />
+      <path d="M8 11.5h8" />
+    </svg>
+  )
+}
+
+function EvidenceIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M12 3.5 5.5 7v10L12 20.5 18.5 17V7L12 3.5Z" />
+      <path d="M12 3.5v17" />
+      <path d="M5.5 7 12 10.5 18.5 7" />
+    </svg>
+  )
+}
+
+function OfficersIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1" />
+      <circle cx="10" cy="7" r="3.5" />
+      <path d="M19 19v-1a4 4 0 0 0-3-3.87" />
+      <path d="M15.5 4.5A3.5 3.5 0 0 1 18.5 8" />
+    </svg>
+  )
+}
+
+function SettingsIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <circle cx="12" cy="12" r="3.3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1.02 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.96 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.02H2.95a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.96a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 8.96 4.6a1.7 1.7 0 0 0 1.02-1.56V2.95a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.04 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 8.96a1.7 1.7 0 0 0 1.56 1.02h.09a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
+    </svg>
+  )
+}
+
+const iconMap = {
+  dashboard: DashboardIcon,
+  cases: CasesIcon,
+  evidence: EvidenceIcon,
+  officers: OfficersIcon,
+  settings: SettingsIcon,
+}
+
+export default function Sidebar({ items }) {
+  return (
+    <aside className="w-full bg-[#12263d] text-slate-200 lg:w-[255px] lg:min-h-screen">
+      <div className="flex flex-col gap-6 p-4 lg:px-4 lg:py-5">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1f3a4c] text-sm font-bold text-white shadow-inner shadow-slate-700/40">
+            E
+          </div>
+          <div className="min-w-0 leading-tight">
+            <div className="text-[1.7rem] font-semibold tracking-tight text-white">EviLog</div>
+            <div className="text-xs text-slate-300">Ravet Police Station</div>
+          </div>
+        </div>
+
+        <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+          {items.map(({ id, label, active }) => {
+            const Icon = iconMap[id] || DashboardIcon
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`navigation-item min-w-[150px] ${
+                  active
+                    ? 'bg-[#dfe6ef] text-slate-800 shadow-sm'
+                    : 'text-slate-300 hover:bg-[#1a2f45] hover:text-white'
+                }`}
+              >
+                <Icon className={iconClassName} />
+                <span>{label}</span>
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+    </aside>
+  )
+}

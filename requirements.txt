@@ -4,3 +4,9 @@ uvicorn[standard]
 pydantic
 pymongo
 python-dotenv
+opencv-contrib-python>=4.8.0
+numpy>=1.24.0
+onnxruntime>=1.16.0
+pyyaml>=6.0
+pytest>=7.4.0
+mongomock>=4.1.0

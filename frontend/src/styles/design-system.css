@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+@layer base {
+  :root {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+    color: #1f2937;
+    background-color: #edf3f7;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    background: #edf3f7;
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background: #edf3f7;
+    color: #1f2937;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(148, 163, 184, 0.12);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(51, 65, 85, 0.25);
+    border-radius: 9999px;
+  }
+}
+
+@layer components {
+  .dashboard-shell {
+    @apply min-h-screen bg-[#edf3f7] text-slate-800;
+  }
+
+  .dashboard-panel {
+    @apply rounded-[18px] border border-[#dfe7ef] bg-white/80 shadow-[0_1px_0_rgba(15,23,42,0.03)];
+  }
+
+  .navigation-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-200;
+  }
+}
