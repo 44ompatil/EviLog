@@ -1,8 +1,9 @@
-export default function QuickActionButton({ label, tone = 'slate' }) {
+export default function QuickActionButton({ label, tone = 'green', onClick }) {
   const toneClasses = {
-    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    slate: 'bg-slate-100 text-slate-700 border-slate-200',
-    violet: 'bg-violet-50 text-violet-700 border-violet-200',
+    green: 'bg-[#edf8ee] text-[#1b7b52] border-[#bfe7d0]',
+    emerald: 'bg-[#edf8ee] text-[#1b7b52] border-[#bfe7d0]',
+    slate: 'bg-[#edf8ee] text-[#1b7b52] border-[#bfe7d0]',
+    violet: 'bg-[#edf8ee] text-[#1b7b52] border-[#bfe7d0]',
   }
 
   const icons = {
@@ -27,6 +28,7 @@ export default function QuickActionButton({ label, tone = 'slate' }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors hover:brightness-95 ${toneClasses[tone] || toneClasses.slate}`}
     >
       <span className="flex h-4 w-4 items-center justify-center">{icons[tone] || icons.slate}</span>

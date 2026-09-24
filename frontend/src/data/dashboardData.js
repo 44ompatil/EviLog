@@ -1,9 +1,9 @@
 export const sidebarItems = [
-  { id: 'dashboard', label: 'Dashboard', active: true },
-  { id: 'cases', label: 'Cases' },
-  { id: 'evidence', label: 'Evidence' },
-  { id: 'officers', label: 'Officers' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard' },
+  { id: 'cases', label: 'Cases', path: '/cases' },
+  { id: 'evidence', label: 'Evidence', path: '/evidence' },
+  { id: 'officers', label: 'Officers', path: '/officers' },
+  { id: 'settings', label: 'Settings', path: '/settings' },
 ]
 
 export const dashboardStats = [

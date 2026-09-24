@@ -1,4 +1,6 @@
-const iconClassName = 'h-4 w-4 shrink-0';
+import { NavLink } from 'react-router-dom'
+
+const iconClassName = 'h-4 w-4 shrink-0'
 
 function DashboardIcon({ className }) {
   return (
@@ -42,6 +44,16 @@ function OfficersIcon({ className }) {
   )
 }
 
+function SecurityAlertsIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
+      <path d="M12 3.5 18.5 6v5.2c0 4.1-2.4 7.8-6.5 9.3-4.1-1.5-6.5-5.2-6.5-9.3V6L12 3.5Z" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </svg>
+  )
+}
+
 function SettingsIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className={className}>
@@ -56,39 +68,48 @@ const iconMap = {
   cases: CasesIcon,
   evidence: EvidenceIcon,
   officers: OfficersIcon,
+  'security-alerts': SecurityAlertsIcon,
   settings: SettingsIcon,
 }
 
-export default function Sidebar({ items }) {
+export default function Sidebar({ items = [] }) {
   return (
-    <aside className="w-full bg-[#12263d] text-slate-200 lg:w-[255px] lg:min-h-screen">
-      <div className="flex flex-col gap-6 p-4 lg:px-4 lg:py-5">
-        <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1f3a4c] text-sm font-bold text-white shadow-inner shadow-slate-700/40">
-            E
-          </div>
+    <aside className="w-full bg-[#12263d] text-slate-200 lg:w-[255px] lg:min-h-screen lg:shrink-0">
+      <div className="flex flex-col gap-6 p-0 lg:py-5">
+        <div className="flex items-center gap-3 px-4 py-4 lg:px-4 lg:py-3">
+          <img
+            src="/logo.png"
+            alt="EviLog logo"
+            className="h-9 w-auto max-w-[2.25rem] object-contain"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
           <div className="min-w-0 leading-tight">
             <div className="text-[1.7rem] font-semibold tracking-tight text-white">EviLog</div>
             <div className="text-xs text-slate-300">Ravet Police Station</div>
           </div>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
-          {items.map(({ id, label, active }) => {
+        <nav className="flex gap-2 overflow-x-auto px-3 pb-1 lg:flex-col lg:overflow-visible lg:px-3">
+          {items.map(({ id, label, path }) => {
             const Icon = iconMap[id] || DashboardIcon
+
             return (
-              <button
+              <NavLink
                 key={id}
-                type="button"
-                className={`navigation-item min-w-[150px] ${
-                  active
-                    ? 'bg-[#dfe6ef] text-slate-800 shadow-sm'
-                    : 'text-slate-300 hover:bg-[#1a2f45] hover:text-white'
-                }`}
+                to={path}
+                className={({ isActive }) =>
+                  `navigation-item min-w-[150px] ${
+                    isActive
+                      ? 'bg-[#dfe6ef] text-slate-800 shadow-sm'
+                      : 'text-slate-300 hover:bg-[#1a2f45] hover:text-white'
+                  }`
+                }
               >
                 <Icon className={iconClassName} />
                 <span>{label}</span>
-              </button>
+              </NavLink>
             )
           })}
         </nav>

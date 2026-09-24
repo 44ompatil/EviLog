@@ -18,16 +18,22 @@
   }
 
   html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
     background: #edf3f7;
     min-height: 100%;
   }
 
   body {
     margin: 0;
+    padding: 0;
     min-width: 320px;
     min-height: 100vh;
+    width: 100%;
     background: #edf3f7;
     color: #1f2937;
+    overflow-x: hidden;
   }
 
   button,
@@ -38,7 +44,10 @@
   }
 
   #root {
+    width: 100%;
     min-height: 100vh;
+    margin: 0;
+    padding: 0;
   }
 
   ::-webkit-scrollbar {

@@ -24,7 +24,7 @@ export default function StatCard({ label, value, icon, tone }) {
 
   const toneClasses = {
     slate: 'bg-slate-100 text-slate-600',
-    emerald: 'bg-emerald-100 text-emerald-600',
+    emerald: 'bg-slate-100 text-slate-600',
   }
 
   return (

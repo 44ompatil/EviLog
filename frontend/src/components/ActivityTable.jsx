@@ -1,6 +1,6 @@
 import StatusBadge from './StatusBadge'
 
-export default function ActivityTable({ rows }) {
+export default function ActivityTable({ rows, onOpenEvidence, onOpenOfficer }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-[760px] w-full border-separate border-spacing-0 text-left text-sm text-slate-600">
@@ -26,8 +26,24 @@ export default function ActivityTable({ rows }) {
             return (
               <tr key={row.transactionId} className="border-t border-[#edf1f5] text-slate-700">
                 <td className="py-3 pl-2 pr-4 font-medium text-slate-700">{row.transactionId}</td>
-                <td className="py-3 pr-4">{row.officerId}</td>
-                <td className="py-3 pr-4">{row.evidenceId}</td>
+                <td className="py-3 pr-4">
+                  <button
+                    type="button"
+                    onClick={() => onOpenOfficer?.(row.officerId)}
+                    className="rounded px-1 py-0.5 font-medium text-[#1f5ea8] underline-offset-2 transition hover:text-[#204d87] hover:underline"
+                  >
+                    {row.officerId}
+                  </button>
+                </td>
+                <td className="py-3 pr-4">
+                  <button
+                    type="button"
+                    onClick={() => onOpenEvidence?.(row.evidenceId)}
+                    className="rounded px-1 py-0.5 font-medium text-[#1f5ea8] underline-offset-2 transition hover:text-[#204d87] hover:underline"
+                  >
+                    {row.evidenceId}
+                  </button>
+                </td>
                 <td className="py-3 pr-4">
                   <span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-medium ${actionStyles[row.actionTone] || 'bg-slate-100 text-slate-700'}`}>
                     {row.action}
