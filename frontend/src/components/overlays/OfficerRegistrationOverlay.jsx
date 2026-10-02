@@ -79,9 +79,10 @@ function DropdownField({ label, value, options, open, setOpen, onChange, require
 
 export default function OfficerRegistrationOverlay({
   isOpen,
-  officers = [],
   onClose,
   onAddOfficer,
+  onPrepareFace,
+  onCancelFace,
 }) {
   const [form, setForm] = useState(createEmptyForm)
   const [errors, setErrors] = useState({})
@@ -89,12 +90,15 @@ export default function OfficerRegistrationOverlay({
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
   const [faceAuthenticated, setFaceAuthenticated] = useState(false)
   const [faceEnrollmentOpen, setFaceEnrollmentOpen] = useState(false)
-  const [enrollmentSuccess, setEnrollmentSuccess] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [sampleIndex, setSampleIndex] = useState(0)
   const [capturedSamples, setCapturedSamples] = useState({})
   const [registrationSucceeded, setRegistrationSucceeded] = useState(false)
   const [registeredOfficer, setRegisteredOfficer] = useState(null)
+  const [preparedOfficerId, setPreparedOfficerId] = useState(null)
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPreparingEnrollment, setIsPreparingEnrollment] = useState(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
@@ -117,33 +121,25 @@ export default function OfficerRegistrationOverlay({
   }
 
   const resetRegistrationState = () => {
+    if (preparedOfficerId) void Promise.resolve(onCancelFace?.(preparedOfficerId)).catch(() => {})
     setForm(createEmptyForm())
     setErrors({})
     setFaceAuthenticated(false)
     setFaceEnrollmentOpen(false)
-    setEnrollmentSuccess(false)
     setCameraError('')
     setSampleIndex(0)
     setCapturedSamples({})
     setRegistrationSucceeded(false)
     setRegisteredOfficer(null)
+    setPreparedOfficerId(null)
+    setFormError('')
     stopCamera()
   }
 
   const closeRegister = () => {
-    stopCamera()
-    setFaceEnrollmentOpen(false)
-    setCameraError('')
-    setEnrollmentSuccess(false)
-    setRegistrationSucceeded(false)
-    setRegisteredOfficer(null)
+    resetRegistrationState()
     onClose?.()
   }
-
-  useEffect(() => {
-    if (!isOpen) return
-    resetRegistrationState()
-  }, [isOpen])
 
   useEffect(() => {
     return () => stopCamera()
@@ -215,15 +211,6 @@ export default function OfficerRegistrationOverlay({
     return Object.keys(nextErrors).length === 0
   }
 
-  const getNextOfficerId = () => {
-    const extracted = officers
-      .map((officer) => Number(String(officer.id).replace(/\D/g, '')))
-      .filter((value) => Number.isFinite(value))
-
-    const maxNumber = extracted.length ? Math.max(...extracted) : 703
-    return `OF-${maxNumber + 1}`
-  }
-
   const handleCaptureSample = () => {
     const video = videoRef.current
 
@@ -254,36 +241,66 @@ export default function OfficerRegistrationOverlay({
     }
   }
 
-  const handleCompleteEnrollment = () => {
+  const handleCompleteEnrollment = async () => {
     if (!isEnrollmentReady) return
-
-    setFaceAuthenticated(true)
-    setEnrollmentSuccess(true)
-    setFaceEnrollmentOpen(false)
-    stopCamera()
-  }
-
-  const handleRegisterOfficer = () => {
-    if (!validateForm()) return
-
-    const generatedId = getNextOfficerId()
-    const timestamp = new Date()
-    const nextOfficer = {
-      id: generatedId,
-      name: form.name.trim(),
-      badgeNumber: form.badgeNumber.trim(),
-      role: form.role,
-      faceAuthentication: faceAuthenticated ? 'Enrolled' : 'Not Enrolled',
-      status: form.status,
-      registered: timestamp.toLocaleDateString('en-CA'),
-      createdAt: timestamp.toISOString(),
+    setIsPreparingEnrollment(true)
+    setFormError('')
+    try {
+      const enrollment = await onPrepareFace?.({
+        'Front Profile': capturedSamples['Front Profile'],
+        'Left Profile': capturedSamples['Left Profile'],
+        'Right Profile': capturedSamples['Right Profile'],
+      })
+      if (!enrollment?.enrolled || !enrollment?.officer_id) {
+        throw new Error('Face enrollment was not confirmed by the server.')
+      }
+      if (preparedOfficerId && preparedOfficerId !== enrollment.officer_id) {
+        void Promise.resolve(onCancelFace?.(preparedOfficerId)).catch(() => {})
+      }
+      setPreparedOfficerId(enrollment.officer_id)
+      setFaceAuthenticated(true)
+      setFaceEnrollmentOpen(false)
+      stopCamera()
+    } catch (error) {
+      if (!preparedOfficerId) {
+        setFaceAuthenticated(false)
+        setPreparedOfficerId(null)
+        setSampleIndex(0)
+        setCapturedSamples({})
+      }
+      setFaceEnrollmentOpen(false)
+      stopCamera()
+      setFormError(error.message || 'Unable to enroll these face samples.')
+    } finally {
+      setIsPreparingEnrollment(false)
     }
-
-    onAddOfficer?.(nextOfficer)
-    setRegisteredOfficer(nextOfficer)
-    setRegistrationSucceeded(true)
   }
 
+  const handleRegisterOfficer = async () => {
+    if (isSubmitting) return
+    if (!validateForm()) return
+    if (!faceAuthenticated || !preparedOfficerId) {
+      setFormError('Complete face enrollment before registering this officer.')
+      return
+    }
+    setFormError('')
+    setIsSubmitting(true)
+    try {
+      const result = await onAddOfficer?.(
+        { ...form, name: form.name.trim(), badgeNumber: form.badgeNumber.trim() },
+        null,
+        preparedOfficerId,
+      )
+      const officer = result?.officer || result
+      setRegisteredOfficer(officer)
+      setPreparedOfficerId(null)
+      setRegistrationSucceeded(true)
+    } catch (error) {
+      setFormError(error.message || 'Unable to register officer.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
   if (!isOpen) return null
 
   return (
@@ -371,7 +388,7 @@ export default function OfficerRegistrationOverlay({
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Officer ID</label>
                 <input
                   type="text"
-                  value={registeredOfficer ? registeredOfficer.id : 'SYSTEM-GENERATED'}
+                  value={preparedOfficerId || (registeredOfficer ? registeredOfficer.id : 'SYSTEM-GENERATED')}
                   readOnly
                   className="h-11 w-full rounded-xl border border-[#dfe7ef] bg-[#f8fafc] px-3 text-sm text-slate-500 outline-none"
                 />
@@ -388,6 +405,8 @@ export default function OfficerRegistrationOverlay({
               </div>
             </div>
 
+            {formError && <p className="mt-3 text-sm text-red-600" role="alert">{formError}</p>}
+
             <div className="mt-5 rounded-[16px] border border-[#e2e8f0] bg-[#f8fafc] p-4">
               <div className="mb-3 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                 Face Authentication
@@ -403,6 +422,10 @@ export default function OfficerRegistrationOverlay({
                 <button
                   type="button"
                   onClick={() => {
+                    if (faceAuthenticated) {
+                      setSampleIndex(0)
+                      setCapturedSamples({})
+                    }
                     setFaceEnrollmentOpen(true)
                     setCameraError('')
                   }}
@@ -427,12 +450,13 @@ export default function OfficerRegistrationOverlay({
               <button
                 type="button"
                 onClick={handleRegisterOfficer}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f1f32]"
+                disabled={isSubmitting || !faceAuthenticated || !preparedOfficerId}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f1f32] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                Register Officer
+                {isSubmitting ? 'Registering…' : 'Register Officer'}
               </button>
             </div>
           </div>
@@ -442,6 +466,7 @@ export default function OfficerRegistrationOverlay({
               ✓
             </div>
             <h3 className="text-[1.4rem] font-semibold text-slate-800">Officer Registered</h3>
+            {formError && <p className="mt-3 text-sm text-red-600" role="alert">{formError}</p>}
             <div className="mt-4 space-y-2 text-sm text-slate-700">
               <p>
                 <span className="font-medium text-slate-600">Officer ID:</span> {registeredOfficer.id}
@@ -487,7 +512,6 @@ export default function OfficerRegistrationOverlay({
                   stopCamera()
                   setFaceEnrollmentOpen(false)
                   setCameraError('')
-                  setEnrollmentSuccess(false)
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 aria-label="Close face enrollment"
@@ -547,7 +571,6 @@ export default function OfficerRegistrationOverlay({
                   stopCamera()
                   setFaceEnrollmentOpen(false)
                   setCameraError('')
-                  setEnrollmentSuccess(false)
                 }}
                 className="rounded-xl border border-[#dfe7ef] bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
               >
@@ -558,9 +581,10 @@ export default function OfficerRegistrationOverlay({
                 <button
                   type="button"
                   onClick={handleCompleteEnrollment}
+                  disabled={isPreparingEnrollment}
                   className="rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0f1f32]"
                 >
-                  Continue
+                  {isPreparingEnrollment ? 'Enrolling…' : 'Continue'}
                 </button>
               ) : (
                 <button

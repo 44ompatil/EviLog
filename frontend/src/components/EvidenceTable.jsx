@@ -1,7 +1,7 @@
 import Table from './Table'
 import StatusPill from './StatusPill'
 
-export default function EvidenceTable({ rows, onOpenEvidence, onOpenCase, onEdit, onDelete }) {
+export default function EvidenceTable({ rows, onOpenEvidence, onOpenCase, onOpenRfid, onEdit, onDelete }) {
   const actionButtonClass =
     'inline-flex items-center justify-center rounded-md border border-[#dfe7ef] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-800'
 
@@ -37,7 +37,16 @@ export default function EvidenceTable({ rows, onOpenEvidence, onOpenCase, onEdit
     },
     { key: 'name', label: 'Evidence Name', cellClass: 'font-medium text-slate-800' },
     { key: 'type', label: 'Type', cellClass: 'text-slate-600' },
-    { key: 'rfid', label: 'Assigned RFID', cellClass: 'text-slate-700' },
+    {
+      key: 'rfid',
+      label: 'Assigned RFID',
+      cellClass: 'text-slate-700',
+      render: (row) => row.rfid ? (
+        <button type="button" onClick={() => onOpenRfid?.(row.rfid)} className="font-medium text-[#1f5ea8] underline-offset-2 hover:underline">
+          {row.rfid}
+        </button>
+      ) : '—',
+    },
     {
       key: 'status',
       label: 'Status',

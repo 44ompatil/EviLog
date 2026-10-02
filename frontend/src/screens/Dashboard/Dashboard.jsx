@@ -1,32 +1,27 @@
-import { useState } from 'react'
 import StatCard from '../../components/StatCard'
 import QuickActionButton from '../../components/QuickActionButton'
 import ActivityTable from '../../components/ActivityTable'
 import {
   dashboardStats,
   quickActions,
-  activityRows,
 } from '../../data/dashboardData'
 
 export default function Dashboard({
   cases = [],
   evidence = [],
   officers = [],
+  activityRows = [],
+  onOpenEntity,
   onRegisterCase,
   onRegisterOfficer,
   onRegisterEvidence,
   onAssignRfid,
 }) {
-  const [details, setDetails] = useState(null)
-
   const stats = [
     { ...dashboardStats[0], value: cases.length },
     { ...dashboardStats[1], value: evidence.length },
     { ...dashboardStats[2], value: officers.length },
   ]
-
-  const openDetails = (type, id) => setDetails({ type, id })
-  const closeDetails = () => setDetails(null)
 
   return (
     <div className="w-full bg-[#f3f6f8]">
@@ -70,53 +65,13 @@ export default function Dashboard({
 
             <ActivityTable
               rows={activityRows}
-              onOpenEvidence={(id) => openDetails('evidence', id)}
-              onOpenOfficer={(id) => openDetails('officer', id)}
+              onOpenEvidence={(id) => onOpenEntity?.('evidence', id)}
+              onOpenOfficer={(id) => onOpenEntity?.('officer', id)}
             />
           </section>
         </div>
       </div>
 
-      {details && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {details.type === 'evidence' ? 'Evidence' : 'Officer'} details
-                </p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-800">
-                  {details.type === 'evidence' ? 'Evidence Details' : 'Officer Details'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={closeDetails}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Close details"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm text-slate-600">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                  {details.type === 'evidence' ? 'Evidence ID' : 'Officer ID'}
-                </span>
-                <span className="mt-1 block text-base font-semibold text-slate-800">{details.id}</span>
-              </div>
-              <div className="rounded-xl border border-dashed border-slate-200 p-3">
-                <p className="text-slate-600">
-                  {details.type === 'evidence'
-                    ? 'Evidence record information and chain-of-custody details would load here.'
-                    : 'Officer profile and assignment details would load here.'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

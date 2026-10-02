@@ -3,20 +3,6 @@ import CaseInformationForm from '../forms/CaseInformationForm'
 import EvidenceForm from '../forms/EvidenceForm'
 import ReviewCase from '../forms/ReviewCase'
 
-const allRfidOptions = ['RFID-001', 'RFID-002', 'RFID-003', 'RFID-004', 'RFID-005', 'RFID-006']
-
-function getCaseId() {
-  const year = new Date().getFullYear()
-  const random = Math.floor(Math.random() * 9000 + 1000)
-  return `CSE-${year}-${random}`
-}
-
-function getEvidenceId(index) {
-  const year = new Date().getFullYear()
-  const serial = String(index + 1).padStart(4, '0')
-  return `EVD-${year}-${serial}`
-}
-
 function getInitialEvidenceItem() {
   return {
     id: Date.now() + Math.random(),
@@ -56,6 +42,7 @@ export default function RegisterCaseOverlay({
   mode = 'create',
   initialCaseData = null,
   initialEvidenceItems = [],
+  availableRfids = [],
 }) {
   const isEditMode = mode === 'edit'
   const workflowSteps = isEditMode
@@ -87,6 +74,8 @@ export default function RegisterCaseOverlay({
   const [caseErrors, setCaseErrors] = useState({})
   const [evidenceErrors, setEvidenceErrors] = useState([{}])
   const [successData, setSuccessData] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
 
   const availableRfidOptionsByItem = useMemo(() => {
     return evidenceItems.map((item, itemIndex) => {
@@ -94,11 +83,11 @@ export default function RegisterCaseOverlay({
         entryIndex !== itemIndex && entry.assignedRfid ? [entry.assignedRfid] : [],
       )
 
-      return allRfidOptions.filter(
+      return availableRfids.filter(
         (rfid) => rfid === item.assignedRfid || !usedInOtherItems.includes(rfid),
       )
     })
-  }, [evidenceItems])
+  }, [availableRfids, evidenceItems])
 
   const isCaseInfoValid = !Object.keys(validateCaseData(caseData)).length
 
@@ -179,7 +168,8 @@ export default function RegisterCaseOverlay({
     if (step > 1) setStep((current) => current - 1)
   }
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    if (isSubmitting) return
     const caseInfoErrors = validateCaseData(caseData)
 
     if (Object.keys(caseInfoErrors).length > 0) {
@@ -200,8 +190,16 @@ export default function RegisterCaseOverlay({
         evidenceItems: [],
       }
 
-      onCaseSaved?.(payload)
-      closeOverlay()
+      setIsSubmitting(true)
+      setFormError('')
+      try {
+        await onCaseSaved?.(payload)
+        closeOverlay()
+      } catch (error) {
+        setFormError(error.message || 'Unable to save this case.')
+      } finally {
+        setIsSubmitting(false)
+      }
       return
     }
 
@@ -211,15 +209,25 @@ export default function RegisterCaseOverlay({
       return
     }
 
-    const generatedCaseId = getCaseId()
-    const generatedEvidenceIds = evidenceItems.map((_, index) => getEvidenceId(index))
-
-    setSuccessData({
-      caseId: generatedCaseId,
-      evidenceCount: evidenceItems.length,
-      evidenceIds: generatedEvidenceIds,
-    })
-    setStep(4)
+    setIsSubmitting(true)
+    setFormError('')
+    try {
+      const result = await onCaseRegistered?.({
+        caseData: {
+          ...caseData,
+          title: caseData.title.trim(),
+          firNumber: caseData.firNumber.trim(),
+          description: caseData.description.trim(),
+        },
+        evidenceItems: evidenceItems.map((item) => ({ ...item })),
+      })
+      setSuccessData({ caseId: result?.id || result?.case?.case_id, evidenceCount: evidenceItems.length })
+      setStep(4)
+    } catch (error) {
+      setFormError(error.message || 'Unable to register this case.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const resetOverlay = () => {
@@ -248,6 +256,7 @@ export default function RegisterCaseOverlay({
     setCaseErrors({})
     setEvidenceErrors([{}])
     setSuccessData(null)
+    setFormError('')
   }
 
   const closeOverlay = () => {
@@ -257,27 +266,6 @@ export default function RegisterCaseOverlay({
 
   const handleCaseRegistered = () => {
     if (!successData) return
-    onCaseRegistered?.({
-      id: successData.caseId,
-      title: caseData.title,
-      caseType: caseData.caseType,
-      status: caseData.status,
-      firNumber: caseData.firNumber,
-      description: caseData.description,
-      createdAt: new Date().toISOString(),
-      created: new Date().toISOString().slice(0, 10),
-      evidenceItems: evidenceItems.map((item, index) => ({
-        ...item,
-        id: successData.evidenceIds[index],
-        evidenceId: successData.evidenceIds[index],
-        evidenceName: item.evidenceName,
-        evidenceType: item.evidenceType,
-        description: item.description,
-        assignedRfid: item.assignedRfid,
-        status: item.status || 'Stored',
-        registeredAt: new Date().toISOString().slice(0, 10),
-      })),
-    })
     closeOverlay()
   }
 
@@ -362,6 +350,8 @@ export default function RegisterCaseOverlay({
                   }
                 />
 
+                {formError && <p className="text-sm text-red-600" role="alert">{formError}</p>}
+
                 <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-between">
                   <button
                     type="button"
@@ -374,12 +364,13 @@ export default function RegisterCaseOverlay({
                   <button
                     type="button"
                     onClick={handleNext}
+                    disabled={isSubmitting || !isCaseInfoValid}
                     disabled={!isCaseInfoValid}
                     className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition ${
                       isCaseInfoValid ? 'bg-[#172c41] hover:bg-[#111f32]' : 'cursor-not-allowed bg-slate-300'
                     }`}
                   >
-                    {isEditMode ? 'Save Changes' : 'Next: Evidence →'}
+                    {isSubmitting ? 'Saving…' : isEditMode ? 'Save Changes' : 'Next: Evidence →'}
                   </button>
                 </div>
               </div>
@@ -433,6 +424,8 @@ export default function RegisterCaseOverlay({
 
                 <ReviewCase caseData={caseData} evidenceItems={evidenceItems} />
 
+                {formError && <p className="text-sm text-red-600" role="alert">{formError}</p>}
+
                 <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-between">
                   <button
                     type="button"
@@ -445,9 +438,10 @@ export default function RegisterCaseOverlay({
                   <button
                     type="button"
                     onClick={handleRegister}
-                    className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32]"
+                    disabled={isSubmitting}
+                    className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Register Case
+                    {isSubmitting ? 'Registering…' : 'Register Case'}
                   </button>
                 </div>
               </div>

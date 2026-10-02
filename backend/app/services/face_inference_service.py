@@ -109,13 +109,17 @@ class FaceInferenceService:
 
         self.detector.setInputSize((width, height))
         self.detector.setScoreThreshold(threshold)
-        self.detector.setNmsThreshold(nms_threshold)
+        self.detector.setNMSThreshold(nms_threshold)
 
         detections = self.detector.detect(image)
         if detections is None:
             return []
 
-        detected, _ = detections
+        if isinstance(detections, tuple):
+            detected = detections[1] if len(detections) > 1 else None
+        else:
+            detected = detections
+
         if detected is None or len(detected) == 0:
             return []
 
@@ -128,7 +132,7 @@ class FaceInferenceService:
                 continue
             if w < min_size or h < min_size:
                 continue
-            accepted.append((x, y, w, h, confidence))
+            accepted.append((x, y, w, h, confidence, item))
         return accepted
 
     @staticmethod
@@ -154,7 +158,8 @@ class FaceInferenceService:
         if not multiple_faces_allowed and len(faces) > 1:
             raise FaceInferenceError("Multiple faces detected.")
 
-        x, y, w, h, _ = faces[0]
+        face_match = faces[0]
+        x, y, w, h, _ = [float(v) for v in face_match[:5]]
         x = max(0, int(round(x)))
         y = max(0, int(round(y)))
         w = max(1, int(round(w)))
@@ -168,7 +173,8 @@ class FaceInferenceService:
             raise FaceInferenceError("Face too small.")
 
         try:
-            aligned = self.recognizer.alignCrop(image, np.array([x, y, w, h], dtype=np.float32))
+            face_box = np.asarray(face_match[5], dtype=np.float32) if len(face_match) > 5 and face_match[5] is not None else np.array([x, y, w, h], dtype=np.float32)
+            aligned = self.recognizer.alignCrop(image, face_box)
             embedding = self.recognizer.feature(aligned)
         except Exception as exc:  # pragma: no cover - model runtime path
             raise FaceInferenceError("Model inference failure.") from exc

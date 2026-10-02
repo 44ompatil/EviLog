@@ -13,6 +13,7 @@ from .evilog import (
     EvidenceUpdate,
     OfficerBase,
     OfficerCreate,
+    OfficerFaceRegistrationCreate,
     OfficerResponse,
     OfficerUpdate,
     RFIDMappingBase,
@@ -36,6 +37,7 @@ from .evilog import (
 __all__ = [
     "OfficerBase",
     "OfficerCreate",
+    "OfficerFaceRegistrationCreate",
     "OfficerUpdate",
     "OfficerResponse",
     "CaseBase",

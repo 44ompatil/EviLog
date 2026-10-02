@@ -11,6 +11,8 @@ export default function AssignRfidOverlay({
   const [selectedRfid, setSelectedRfid] = useState('')
   const [errors, setErrors] = useState({})
   const [successMessage, setSuccessMessage] = useState('')
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const selectedEvidence = useMemo(
     () => evidence.find((item) => item.id === selectedEvidenceId) || null,
@@ -22,6 +24,7 @@ export default function AssignRfidOverlay({
     setSelectedRfid('')
     setErrors({})
     setSuccessMessage('')
+    setFormError('')
   }
 
   const closeOverlay = () => {
@@ -29,7 +32,8 @@ export default function AssignRfidOverlay({
     onClose?.()
   }
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
+    if (isSubmitting) return
     const nextErrors = {}
 
     if (!selectedEvidenceId) nextErrors.evidenceId = 'Select an evidence item.'
@@ -40,10 +44,17 @@ export default function AssignRfidOverlay({
       return
     }
 
-    const success = onAssign?.(selectedEvidenceId, selectedRfid)
-    if (success !== false) {
+    setIsSubmitting(true)
+    setFormError('')
+    try {
+      const success = await onAssign?.(selectedEvidenceId, selectedRfid)
+      if (success === false) return
       setSuccessMessage(`${selectedRfid} assigned to ${selectedEvidence?.name || selectedEvidenceId}`)
       setTimeout(() => closeOverlay(), 1200)
+    } catch (error) {
+      setFormError(error.message || 'Unable to assign this RFID tag.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -131,6 +142,8 @@ export default function AssignRfidOverlay({
               {errors.rfid && <p className="mt-1.5 text-xs text-[#dc2626]">{errors.rfid}</p>}
             </div>
 
+            {formError && <p className="text-sm text-red-600" role="alert">{formError}</p>}
+
             <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -142,9 +155,10 @@ export default function AssignRfidOverlay({
               <button
                 type="button"
                 onClick={handleAssign}
-                className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32]"
+                disabled={isSubmitting}
+                className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Assign RFID
+                {isSubmitting ? 'Assigning…' : 'Assign RFID'}
               </button>
             </div>
           </div>

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import Header from './Header'
 import Sidebar from './Sidebar'
 import RegisterCaseOverlay from './overlays/RegisterCaseOverlay'
@@ -7,435 +7,271 @@ import RegisterEvidenceOverlay from './overlays/RegisterEvidenceOverlay'
 import AssignRfidOverlay from './overlays/AssignRfidOverlay'
 import OfficerRegistrationOverlay from './overlays/OfficerRegistrationOverlay'
 import { sidebarItems } from '../data/dashboardData'
-import { caseRows } from '../data/casesData'
-import { evidenceRows } from '../data/evidenceData'
-import { officersRows } from '../data/officersData'
-import { rfidCatalog } from '../data/rfidData'
-import { securityAlertsSeed, markAlertAsRead, markAllAlertsAsRead } from '../data/securityAlertsData'
 import Dashboard from '../screens/Dashboard/Dashboard'
 import Cases from '../screens/Cases/Cases'
 import Evidence from '../screens/Evidence/Evidence'
 import Officers from '../screens/Officers/Officers'
 import SecurityAlerts from '../screens/SecurityAlerts/SecurityAlerts'
 import Settings from '../screens/Settings/Settings'
+import { casesApi } from '../services/cases'
+import { evidenceApi } from '../services/evidence'
+import { officersApi } from '../services/officers'
+import { rfidApi } from '../services/rfid'
+import { alertsApi } from '../services/alerts'
+import { toApiStatus, mapCase, mapEvidence, mapOfficer, mapAlert, mapActivity, currentRfidAssignments } from '../services/adapters'
 
 const screenMeta = {
-  '/dashboard': {
-    title: 'Dashboard',
-    subtitle: 'Overview of evidence and station activity',
-  },
-  '/cases': {
-    title: 'Cases',
-    subtitle: 'Manage registered cases and FIR records',
-  },
-  '/evidence': {
-    title: 'Evidence',
-    subtitle: 'Browse and manage evidence items',
-  },
-  '/officers': {
-    title: 'Officers',
-    subtitle: 'Registered officers and duty records',
-  },
-  '/security-alerts': {
-    title: 'Security Alerts',
-    subtitle: 'Monitor live station security activity',
-  },
-  '/settings': {
-    title: 'Settings',
-    subtitle: 'System configuration and preferences',
-  },
+  '/dashboard': { title: 'Dashboard', subtitle: 'Overview of evidence and station activity' },
+  '/cases': { title: 'Cases', subtitle: 'Manage registered cases and FIR records' },
+  '/evidence': { title: 'Evidence', subtitle: 'Browse and manage evidence items' },
+  '/officers': { title: 'Officers', subtitle: 'Registered officers and duty records' },
+  '/security-alerts': { title: 'Security Alerts', subtitle: 'Monitor live station security activity' },
+  '/settings': { title: 'Settings', subtitle: 'System configuration and preferences' },
 }
 
-const enrichCaseRows = (casesList, evidenceList) =>
-  casesList.map((item) => ({
-    ...item,
-    caseType: item.caseType || item.type,
-    firNumber: item.firNumber || `FIR-${item.id.split('-').slice(-1)[0]}`,
-    description: item.description || 'No additional case description provided.',
-    createdAt: item.createdAt || item.created || new Date().toISOString(),
-    evidence: evidenceList.filter((entry) => entry.caseId === item.id).length,
-  }))
+const asCaseRequest = (record) => ({
+  fir_number: record.firNumber.trim(),
+  case_title: record.title.trim(),
+  description: record.description?.trim() || 'No additional case description provided.',
+  case_type: toApiStatus(record.caseType),
+  status: toApiStatus(record.status),
+})
 
-const buildCustodyHistory = (record = {}) => {
-  const events = []
+const asEvidenceRequest = (record) => ({
+  case_id: record.caseId,
+  evidence_name: record.name.trim(),
+  evidence_type: toApiStatus(record.type),
+  description: record.description?.trim() || 'No additional evidence description provided.',
+  status: toApiStatus(record.status),
+})
 
-  if (record.id) {
-    events.push({
-      type: 'Evidence Registered',
-      date: record.registered || new Date().toISOString().slice(0, 10),
-      time: '09:30',
-      actor: 'System',
-      details: record.id,
-    })
-  }
-
-  if (record.rfid) {
-    events.push({
-      type: 'RFID Assigned',
-      date: record.registered || new Date().toISOString().slice(0, 10),
-      time: '09:42',
-      actor: 'System',
-      details: `RFID: ${record.rfid}`,
-    })
-  }
-
-  return events
-}
-
-const enrichEvidenceRecord = (record) => ({
-  ...record,
-  status: record.status || 'Stored',
-  custodyHistory: Array.isArray(record.custodyHistory) && record.custodyHistory.length
-    ? record.custodyHistory
-    : buildCustodyHistory(record),
+const asOfficerRequest = (record) => ({
+  name: record.name.trim(),
+  badge_number: record.badgeNumber.trim(),
+  role: record.role,
+  status: toApiStatus(record.status),
 })
 
 export default function AppLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const currentPath = location.pathname === '/' ? '/dashboard' : location.pathname
   const meta = screenMeta[currentPath] || screenMeta['/dashboard']
-  const [securityAlerts, setSecurityAlerts] = useState(securityAlertsSeed)
-  const [cases, setCases] = useState(() => enrichCaseRows(caseRows, evidenceRows))
-  const [evidence, setEvidence] = useState(() => evidenceRows.map(enrichEvidenceRecord))
-  const [officers, setOfficers] = useState(officersRows)
+  const [cases, setCases] = useState([])
+  const [evidence, setEvidence] = useState([])
+  const [officers, setOfficers] = useState([])
+  const [rfidTags, setRfidTags] = useState([])
+  const [securityAlerts, setSecurityAlerts] = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [rfidMappings, setRfidMappings] = useState([])
+  const [detailSignal, setDetailSignal] = useState(null)
+  const detailSignalSequence = useRef(0)
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
   const [registerEvidenceOpen, setRegisterEvidenceOpen] = useState(false)
   const [assignRfidOpen, setAssignRfidOpen] = useState(false)
   const [registerCaseOpen, setRegisterCaseOpen] = useState(false)
   const [registerOfficerOpen, setRegisterOfficerOpen] = useState(false)
   const [dashboardOfficerOverlayOpen, setDashboardOfficerOverlayOpen] = useState(false)
 
+  const refreshData = useCallback(async ({ initial = false } = {}) => {
+    if (initial) setLoading(true)
+    try {
+      const [caseRecords, evidenceRecords, officerRecords, tagRecords, mappings, alertRecords, transactionRecords] = await Promise.all([
+        casesApi.list(), evidenceApi.list(), officersApi.list(), rfidApi.list(), rfidApi.mappings(), alertsApi.list(), alertsApi.transactions(),
+      ])
+      const custodyLists = await Promise.all(evidenceRecords.map((record) =>
+        evidenceApi.getCustody(record.evidence_id).catch(() => []),
+      ))
+      const assignments = currentRfidAssignments(tagRecords, mappings)
+      setCases(caseRecords.map((record) => mapCase(record, evidenceRecords)))
+      setEvidence(evidenceRecords.map((record, index) => mapEvidence(record, assignments, custodyLists[index])))
+      setOfficers(officerRecords.map(mapOfficer))
+      setRfidTags(tagRecords)
+      setRfidMappings(mappings)
+      setSecurityAlerts(alertRecords.map(mapAlert))
+      setTransactions(transactionRecords.map(mapActivity))
+      setErrorMessage('')
+    } catch (error) {
+      setErrorMessage(error.message || 'Unable to load EviLog data.')
+    } finally {
+      if (initial) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const task = window.setTimeout(() => refreshData({ initial: true }), 0)
+    return () => window.clearTimeout(task)
+  }, [refreshData])
+
   const availableRfidOptions = useMemo(
-    () => rfidCatalog.filter((tag) => !evidence.some((item) => item.rfid === tag)),
-    [evidence],
+    () => rfidTags.filter((tag) => String(tag.status).toLowerCase() === 'available').map((tag) => tag.rfid_id),
+    [rfidTags],
   )
+  const navItems = sidebarItems.map((item) => ({ ...item, active: item.path === currentPath }))
 
-  const navItems = sidebarItems.map((item) => ({
-    ...item,
-    active: item.path === currentPath,
-  }))
-
-  const handleMarkAlertAsRead = (alertId) => {
-    setSecurityAlerts((currentAlerts) => markAlertAsRead(currentAlerts, alertId))
-  }
-
-  const handleMarkAllAlertsAsRead = () => {
-    setSecurityAlerts((currentAlerts) => markAllAlertsAsRead(currentAlerts))
-  }
-
-  const handleAddCase = (casePayload) => {
-    const nextCase = {
-      ...casePayload,
-      id: casePayload.id,
-      title: casePayload.title,
-      type: casePayload.caseType,
-      caseType: casePayload.caseType,
-      status: casePayload.status,
-      firNumber: casePayload.firNumber,
-      description: casePayload.description,
-      createdAt: casePayload.createdAt,
-      created: casePayload.createdAt ? casePayload.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      evidence: casePayload.evidenceItems?.length || 0,
+  const openEntity = (type, id) => {
+    const paths = { case: '/cases', evidence: '/evidence', officer: '/officers' }
+    if (type === 'rfid') {
+      setDetailSignal({ type, id, sequence: ++detailSignalSequence.current })
+      navigate('/evidence')
+      return
     }
-
-    setCases((currentCases) => [nextCase, ...currentCases])
-
-    if (casePayload.evidenceItems?.length) {
-      const newEvidenceRecords = casePayload.evidenceItems.map((item, index) => ({
-        id: item.id,
-        caseId: casePayload.id,
-        name: item.evidenceName,
-        type: item.evidenceType,
-        description: item.description || '',
-        rfid: item.assignedRfid,
-        status: item.status || 'Stored',
-        registered: item.registeredAt || new Date().toISOString().slice(0, 10),
-        createdAt: item.createdAt || new Date().toISOString(),
-      }))
-
-      setEvidence((currentEvidence) => [...newEvidenceRecords, ...currentEvidence])
-    }
+    const path = paths[type]
+    if (!path || !id) return
+    setDetailSignal({ type, id, sequence: ++detailSignalSequence.current })
+    navigate(path)
   }
 
-  const handleUpdateCase = (updatedCase, evidenceItems = []) => {
-    setCases((currentCases) =>
-      currentCases.map((item) =>
-        item.id === updatedCase.id
-          ? {
-              ...item,
-              title: updatedCase.title,
-              type: updatedCase.caseType,
-              caseType: updatedCase.caseType,
-              status: updatedCase.status,
-              firNumber: updatedCase.firNumber,
-              description: updatedCase.description,
-              createdAt: item.createdAt,
-              created: item.created,
-              evidence: evidenceItems.length || item.evidence,
-            }
-          : item,
-      ),
-    )
-
-    if (evidenceItems.length) {
-      setEvidence((currentEvidence) => {
-        const remaining = currentEvidence.filter((entry) => entry.caseId !== updatedCase.id)
-        const next = evidenceItems.map((item) => ({
-          id: item.id,
-          caseId: updatedCase.id,
+  const handleAddCase = async (payload) => {
+    const savedCase = await casesApi.create(asCaseRequest(payload.caseData || payload))
+    const createdEvidence = []
+    try {
+      for (const item of payload.evidenceItems || []) {
+        const savedEvidence = await evidenceApi.create(asEvidenceRequest({
+          caseId: savedCase.case_id,
           name: item.evidenceName,
           type: item.evidenceType,
-          description: item.description || '',
-          rfid: item.assignedRfid,
+          description: item.description,
           status: item.status || 'Stored',
-          registered: item.registeredAt || new Date().toISOString().slice(0, 10),
-          createdAt: item.createdAt || new Date().toISOString(),
         }))
-
-        return [...next, ...remaining]
-      })
+        createdEvidence.push(savedEvidence)
+        if (item.assignedRfid) await rfidApi.assign({ rfid_id: item.assignedRfid, evidence_id: savedEvidence.evidence_id })
+      }
+    } catch (error) {
+      await refreshData()
+      throw new Error(`Case ${savedCase.case_id} was created, but a related evidence/RFID operation failed: ${error.message}`, { cause: error })
     }
+    await refreshData()
+    return { id: savedCase.case_id, case: savedCase, evidence: createdEvidence }
   }
 
-  const handleDeleteCase = (caseId) => {
-    setCases((currentCases) => currentCases.filter((item) => item.id !== caseId))
-    setEvidence((currentEvidence) => currentEvidence.filter((entry) => entry.caseId !== caseId))
+  const handleUpdateCase = async (record) => {
+    const result = await casesApi.update(record.id, asCaseRequest(record))
+    await refreshData()
+    return result
   }
 
-  const handleAddEvidenceRecord = (payload) => {
-    const caseRecord = cases.find((item) => item.id === payload.caseId)
-    const nextEvidenceItem = enrichEvidenceRecord({
-      id: payload.id,
-      caseId: payload.caseId,
-      name: payload.name,
-      type: payload.type,
-      description: payload.description || '',
-      rfid: payload.rfid,
-      status: payload.status || 'Stored',
-      registered: payload.registered || new Date().toISOString().slice(0, 10),
-      createdAt: payload.createdAt || new Date().toISOString(),
-      custodyHistory: payload.custodyHistory || buildCustodyHistory({
-        id: payload.id,
-        rfid: payload.rfid,
-        registered: payload.registered || new Date().toISOString().slice(0, 10),
-      }),
-    })
-
-    setEvidence((currentEvidence) => [nextEvidenceItem, ...currentEvidence])
-    setCases((currentCases) =>
-      currentCases.map((item) =>
-        item.id === payload.caseId
-          ? { ...item, evidence: (item.evidence || 0) + 1 }
-          : item,
-      ),
-    )
-
-    if (caseRecord && caseRecord.id === payload.caseId) {
-      setCases((currentCases) =>
-        currentCases.map((item) =>
-          item.id === payload.caseId ? { ...item, evidence: (item.evidence || 0) + 1 } : item,
-        ),
-      )
-    }
+  const handleDeleteCase = async (caseId) => {
+    await casesApi.delete(caseId)
+    await refreshData()
   }
 
-  const handleAssignRfid = (evidenceId, rfidValue) => {
-    if (!evidenceId || !rfidValue) return false
-
-    const targetEvidence = evidence.find((item) => item.id === evidenceId)
-    if (!targetEvidence) return false
-
-    const alreadyAssigned = evidence.some(
-      (item) => item.id !== evidenceId && item.rfid === rfidValue,
-    )
-
-    if (alreadyAssigned) return false
-
-    const previousRfid = targetEvidence.rfid
-
-    setEvidence((currentEvidence) =>
-      currentEvidence.map((item) => {
-        if (item.id !== evidenceId) return item
-
-        const nextHistory = [...(item.custodyHistory || [])]
-        const hasRfidEvent = nextHistory.some((entry) => entry.type === 'RFID Assigned' && entry.details === `RFID: ${rfidValue}`)
-
-        if (!hasRfidEvent) {
-          nextHistory.push({
-            type: 'RFID Assigned',
-            date: new Date().toISOString().slice(0, 10),
-            time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
-            actor: 'System',
-            details: `RFID: ${rfidValue}`,
-          })
-        }
-
-        return {
-          ...item,
-          rfid: rfidValue,
-          status: item.status || 'Stored',
-          custodyHistory: nextHistory,
-        }
-      }),
-    )
-
-    if (previousRfid && previousRfid !== rfidValue) {
-      setCases((currentCases) => currentCases)
+  const handleAddEvidenceRecord = async (record) => {
+    const saved = await evidenceApi.create(asEvidenceRequest(record))
+    try {
+      if (record.rfid) await rfidApi.assign({ rfid_id: record.rfid, evidence_id: saved.evidence_id })
+    } catch (error) {
+      try { await evidenceApi.delete(saved.evidence_id) } catch { /* retain a partial record if audit data prevents rollback */ }
+      await refreshData()
+      throw error
     }
+    await refreshData()
+    return { id: saved.evidence_id, caseId: saved.case_id, rfid: record.rfid }
+  }
 
+  const handleAssignRfid = async (evidenceId, rfidValue) => {
+    const target = evidence.find((item) => item.id === evidenceId)
+    if (!target || !rfidValue) return false
+    if (target.rfid === rfidValue) return true
+    try {
+      if (target.rfid) await rfidApi.release({ rfid_id: target.rfid, evidence_id: evidenceId })
+      await rfidApi.assign({ rfid_id: rfidValue, evidence_id: evidenceId })
+    } finally {
+      await refreshData()
+    }
     return true
   }
 
-  const handleUpdateEvidence = (updatedEvidence) => {
-    setEvidence((currentEvidence) =>
-      currentEvidence.map((item) => {
-        if (item.id !== updatedEvidence.id) return item
-
-        const previousRfid = item.rfid
-        const nextRfid = updatedEvidence.rfid || previousRfid
-        const nextHistory = Array.isArray(updatedEvidence.custodyHistory) && updatedEvidence.custodyHistory.length
-          ? updatedEvidence.custodyHistory
-          : item.custodyHistory || buildCustodyHistory(item)
-
-        if (nextRfid && previousRfid !== nextRfid) {
-          nextHistory.push({
-            type: 'RFID Assigned',
-            date: new Date().toISOString().slice(0, 10),
-            time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
-            actor: 'System',
-            details: `RFID: ${nextRfid}`,
-          })
-        }
-
-        return {
-          ...item,
-          ...updatedEvidence,
-          name: updatedEvidence.name,
-          type: updatedEvidence.type,
-          status: updatedEvidence.status,
-          rfid: nextRfid,
-          description: updatedEvidence.description,
-          custodyHistory: nextHistory,
-        }
-      }),
-    )
-
-    if (updatedEvidence.caseId) {
-      setCases((currentCases) =>
-        currentCases.map((item) =>
-          item.id === updatedEvidence.caseId
-            ? {
-                ...item,
-                evidence: evidence.filter((entry) => entry.caseId === updatedEvidence.caseId).length,
-              }
-            : item,
-        ),
-      )
+  const handleUpdateEvidence = async (record) => {
+    try {
+      await evidenceApi.update(record.id, {
+        evidence_name: record.name.trim(),
+        evidence_type: toApiStatus(record.type),
+        description: record.description?.trim() || 'No additional evidence description provided.',
+        status: toApiStatus(record.status),
+      })
+      const current = evidence.find((item) => item.id === record.id)
+      const nextRfid = record.rfid || ''
+      if (current?.rfid !== nextRfid) {
+        if (current?.rfid) await rfidApi.release({ rfid_id: current.rfid, evidence_id: record.id })
+        if (nextRfid) await rfidApi.assign({ rfid_id: nextRfid, evidence_id: record.id })
+      }
+    } finally {
+      await refreshData()
     }
   }
 
-  const handleDeleteEvidence = (evidenceId) => {
-    const target = evidence.find((entry) => entry.id === evidenceId)
-
-    setEvidence((currentEvidence) => currentEvidence.filter((entry) => entry.id !== evidenceId))
-    setCases((currentCases) =>
-      currentCases.map((item) =>
-        item.id === target?.caseId
-          ? { ...item, evidence: Math.max(0, (item.evidence || 0) - 1) }
-          : item,
-      ),
-    )
+  const handleDeleteEvidence = async (evidenceId) => {
+    await evidenceApi.delete(evidenceId)
+    await refreshData()
   }
 
-  const handleUpdateOfficer = (updatedOfficer) => {
-    setOfficers((currentOfficers) =>
-      currentOfficers.map((item) =>
-        item.id === updatedOfficer.id ? { ...item, ...updatedOfficer } : item,
-      ),
-    )
+  const handleAddOfficer = async (record, _capturedSamples, preparedOfficerId) => {
+    if (!preparedOfficerId) throw new Error('Complete face enrollment before registering this officer.')
+    const saved = await officersApi.create({ ...asOfficerRequest(record), officer_id: preparedOfficerId })
+    await refreshData()
+    return { officer: mapOfficer(saved) }
   }
 
-  const handleDeleteOfficer = (officerId) => {
-    setOfficers((currentOfficers) => currentOfficers.filter((item) => item.id !== officerId))
+  const handlePrepareOfficerFace = (capturedSamples) => alertsApi.prepareFaceEnrollment({
+    front_profile: capturedSamples?.front_profile || capturedSamples?.['Front Profile'],
+    left_profile: capturedSamples?.left_profile || capturedSamples?.['Left Profile'],
+    right_profile: capturedSamples?.right_profile || capturedSamples?.['Right Profile'],
+  })
+
+  const handleCancelOfficerFace = (officerId) => alertsApi.cancelFaceEnrollment(officerId)
+
+  const handleUpdateOfficer = async (record) => {
+    const saved = await officersApi.update(record.id, asOfficerRequest(record))
+    await refreshData()
+    return { officer: mapOfficer(saved) }
+  }
+
+  const handleDeleteOfficer = async (officerId) => {
+    await officersApi.delete(officerId)
+    await refreshData()
+  }
+
+  const handleEnrollFace = async (officerId, samples) => {
+    const result = await alertsApi.enrollFace(officerId, samples)
+    await refreshData()
+    return result
+  }
+
+  const handleMarkAlertAsRead = async (alertId) => {
+    try {
+      await alertsApi.markRead(alertId)
+      setSecurityAlerts((current) => current.map((alert) => alert.id === alertId ? { ...alert, read: true } : alert))
+    } catch (error) { setErrorMessage(error.message) }
+  }
+
+  const handleMarkAllAlertsAsRead = async () => {
+    try {
+      await alertsApi.markAllRead()
+      setSecurityAlerts((current) => current.map((alert) => ({ ...alert, read: true })))
+    } catch (error) { setErrorMessage(error.message) }
   }
 
   return (
     <div className="min-h-screen w-full bg-[#edf3f7] text-slate-800">
       <div className="flex min-h-screen w-full flex-col lg:flex-row">
         <Sidebar items={navItems} />
-
         <div className="flex min-h-screen flex-1 flex-col bg-[#f3f6f8]">
-          <Header
-            title={meta.title}
-            subtitle={meta.subtitle}
-            alerts={securityAlerts}
-            onMarkAlertAsRead={handleMarkAlertAsRead}
-            onMarkAllAlertsAsRead={handleMarkAllAlertsAsRead}
-          />
-
+          <Header title={meta.title} subtitle={meta.subtitle} alerts={securityAlerts} onMarkAlertAsRead={handleMarkAlertAsRead} onMarkAllAlertsAsRead={handleMarkAllAlertsAsRead} />
+          {(loading || errorMessage) && (
+            <div className={`mx-4 mt-2 rounded-lg px-3 py-2 text-xs ${errorMessage ? 'border border-red-200 bg-red-50 text-red-700' : 'text-slate-500'}`} role={errorMessage ? 'alert' : 'status'}>
+              {errorMessage || 'Loading records…'}
+              {errorMessage && <button type="button" className="ml-2 font-semibold underline" onClick={() => refreshData({ initial: true })}>Retry</button>}
+            </div>
+          )}
           <main className="flex-1">
             <Routes>
-              <Route
-                path="/dashboard"
-                element={
-                  <Dashboard
-                    cases={cases}
-                    evidence={evidence}
-                    officers={officers}
-                    onRegisterCase={() => setRegisterCaseOpen(true)}
-                    onRegisterOfficer={() => setDashboardOfficerOverlayOpen(true)}
-                    onRegisterEvidence={() => setRegisterEvidenceOpen(true)}
-                    onAssignRfid={() => setAssignRfidOpen(true)}
-                  />
-                }
-              />
-              <Route
-                path="/cases"
-                element={
-                  <Cases
-                    cases={cases}
-                    onAddCase={handleAddCase}
-                    onUpdateCase={handleUpdateCase}
-                    onDeleteCase={handleDeleteCase}
-                  />
-                }
-              />
-              <Route
-                path="/evidence"
-                element={
-                  <Evidence
-                    evidence={evidence}
-                    cases={cases}
-                    officers={officers}
-                    onRegisterEvidence={() => setRegisterEvidenceOpen(true)}
-                    onUpdateEvidence={handleUpdateEvidence}
-                    onDeleteEvidence={handleDeleteEvidence}
-                  />
-                }
-              />
-              <Route
-                path="/officers"
-                element={
-                  <Officers
-                    officers={officers}
-                    evidence={evidence}
-                    openRegisterSignal={registerOfficerOpen}
-                    onRegisterSignalConsumed={() => setRegisterOfficerOpen(false)}
-                    onAddOfficer={(officer) => setOfficers((current) => [officer, ...current])}
-                    onUpdateOfficer={handleUpdateOfficer}
-                    onDeleteOfficer={handleDeleteOfficer}
-                  />
-                }
-              />
-              <Route
-                path="/security-alerts"
-                element={
-                  <SecurityAlerts
-                    alerts={securityAlerts}
-                    onMarkAlertAsRead={handleMarkAlertAsRead}
-                    onMarkAllAlertsAsRead={handleMarkAllAlertsAsRead}
-                  />
-                }
-              />
+              <Route path="/dashboard" element={<Dashboard cases={cases} evidence={evidence} officers={officers} activityRows={transactions} onOpenEntity={openEntity} onRegisterCase={() => setRegisterCaseOpen(true)} onRegisterOfficer={() => setDashboardOfficerOverlayOpen(true)} onRegisterEvidence={() => setRegisterEvidenceOpen(true)} onAssignRfid={() => setAssignRfidOpen(true)} />} />
+              <Route path="/cases" element={<Cases cases={cases} evidence={evidence} activityRows={transactions} openEntitySignal={detailSignal} onOpenEntity={openEntity} onAddCase={handleAddCase} onUpdateCase={handleUpdateCase} onDeleteCase={handleDeleteCase} availableRfids={availableRfidOptions} />} />
+              <Route path="/evidence" element={<Evidence evidence={evidence} officers={officers} rfidTags={rfidTags} rfidMappings={rfidMappings} openEntitySignal={detailSignal} onOpenEntity={openEntity} onRegisterEvidence={() => setRegisterEvidenceOpen(true)} onUpdateEvidence={handleUpdateEvidence} onDeleteEvidence={handleDeleteEvidence} />} />
+              <Route path="/officers" element={<Officers officers={officers} transactions={transactions} alerts={securityAlerts} openEntitySignal={detailSignal} onOpenEntity={openEntity} openRegisterSignal={registerOfficerOpen} onRegisterSignalConsumed={() => setRegisterOfficerOpen(false)} onAddOfficer={handleAddOfficer} onUpdateOfficer={handleUpdateOfficer} onDeleteOfficer={handleDeleteOfficer} onEnrollFace={handleEnrollFace} onPrepareFace={handlePrepareOfficerFace} onCancelFace={handleCancelOfficerFace} />} />
+              <Route path="/security-alerts" element={<SecurityAlerts alerts={securityAlerts} onOpenEntity={openEntity} onMarkAlertAsRead={handleMarkAlertAsRead} onMarkAllAlertsAsRead={handleMarkAllAlertsAsRead} />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -444,49 +280,10 @@ export default function AppLayout() {
         </div>
       </div>
 
-      <OfficerRegistrationOverlay
-        isOpen={dashboardOfficerOverlayOpen}
-        officers={officers}
-        onClose={() => setDashboardOfficerOverlayOpen(false)}
-        onAddOfficer={(record) => {
-          setOfficers((current) => [record, ...current])
-          setDashboardOfficerOverlayOpen(false)
-        }}
-      />
-
-      <RegisterCaseOverlay
-        isOpen={registerCaseOpen}
-        onClose={() => setRegisterCaseOpen(false)}
-        onCaseRegistered={(payload) => {
-          handleAddCase(payload)
-          setRegisterCaseOpen(false)
-        }}
-      />
-
-      <RegisterEvidenceOverlay
-        isOpen={registerEvidenceOpen}
-        cases={cases}
-        evidence={evidence}
-        currentlyAssignedRfids={evidence.map((item) => item.rfid).filter(Boolean)}
-        onClose={() => setRegisterEvidenceOpen(false)}
-        onRegister={(record) => {
-          handleAddEvidenceRecord(record)
-          setRegisterEvidenceOpen(false)
-        }}
-      />
-
-      <AssignRfidOverlay
-        isOpen={assignRfidOpen}
-        evidence={evidence}
-        availableRfids={availableRfidOptions}
-        onClose={() => setAssignRfidOpen(false)}
-        onAssign={(selectedEvidenceId, selectedRfid) => {
-          const success = handleAssignRfid(selectedEvidenceId, selectedRfid)
-          if (success) {
-            setAssignRfidOpen(false)
-          }
-        }}
-      />
+      <OfficerRegistrationOverlay isOpen={dashboardOfficerOverlayOpen} onClose={() => setDashboardOfficerOverlayOpen(false)} onAddOfficer={handleAddOfficer} onPrepareFace={handlePrepareOfficerFace} onCancelFace={handleCancelOfficerFace} />
+      <RegisterCaseOverlay isOpen={registerCaseOpen} availableRfids={availableRfidOptions} onClose={() => setRegisterCaseOpen(false)} onCaseRegistered={handleAddCase} />
+      <RegisterEvidenceOverlay isOpen={registerEvidenceOpen} cases={cases} evidence={evidence} rfidTags={availableRfidOptions} currentlyAssignedRfids={evidence.map((item) => item.rfid).filter(Boolean)} onClose={() => setRegisterEvidenceOpen(false)} onRegister={handleAddEvidenceRecord} />
+      <AssignRfidOverlay isOpen={assignRfidOpen} evidence={evidence} availableRfids={availableRfidOptions} onClose={() => setAssignRfidOpen(false)} onAssign={handleAssignRfid} />
     </div>
   )
 }

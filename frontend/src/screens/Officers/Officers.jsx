@@ -5,7 +5,6 @@ import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog'
 import FilterPopover from '../../components/FilterPopover'
 import StatusPill from '../../components/StatusPill'
 import Table from '../../components/Table'
-import { officersRows } from '../../data/officersData'
 
 const faceAuthStyles = {
   Enrolled: 'border-[#bbf7d0] bg-[#ecfdf5] text-[#15803d]',
@@ -16,9 +15,6 @@ const faceAuthStyles = {
 const sampleSequence = ['Front Profile', 'Left Profile', 'Right Profile']
 const roleOptions = ['Constable', 'Head Constable', 'Assistant Sub-Inspector', 'Sub-Inspector', 'Inspector']
 const statusOptions = ['Active', 'Inactive', 'Suspended']
-
-const actionButtonClass =
-  'flex h-8 w-8 items-center justify-center rounded-md border border-[#dfe7ef] bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700'
 
 function createEmptyForm() {
   return {
@@ -89,15 +85,21 @@ function DropdownField({ label, value, options, open, setOpen, onChange, require
 
 export default function Officers({
   officers = [],
-  evidence = [],
   openRegisterSignal = false,
   onRegisterSignalConsumed,
   onAddOfficer,
   onUpdateOfficer,
   onDeleteOfficer,
+  onEnrollFace,
+  onPrepareFace,
+  onCancelFace,
+  transactions = [],
+  alerts = [],
+  openEntitySignal,
+  onOpenEntity,
 }) {
   const navigate = useNavigate()
-  const [officersList, setOfficersList] = useState(officers)
+  const officersList = officers
   const [activeOfficerId, setActiveOfficerId] = useState(null)
   const [registerOpen, setRegisterOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -115,26 +117,32 @@ export default function Officers({
   const [capturedSamples, setCapturedSamples] = useState({})
   const [registrationSucceeded, setRegistrationSucceeded] = useState(false)
   const [registeredOfficer, setRegisteredOfficer] = useState(null)
+  const [preparedOfficerId, setPreparedOfficerId] = useState(null)
   const [search, setSearch] = useState('')
   const [selectedRole, setSelectedRole] = useState('All')
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedFaceAuth, setSelectedFaceAuth] = useState('All')
   const [filterOpen, setFilterOpen] = useState(null)
-  const [activeEvidenceId, setActiveEvidenceId] = useState(null)
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPreparingEnrollment, setIsPreparingEnrollment] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const videoRef = useRef(null)
   const streamRef = useRef(null)
 
   useEffect(() => {
-    setOfficersList(officers)
-  }, [officers])
-
-  useEffect(() => {
     if (openRegisterSignal) {
-      resetRegistrationState()
-      setRegisterOpen(true)
+      const frame = requestAnimationFrame(() => setRegisterOpen(true))
       onRegisterSignalConsumed?.()
+      return () => cancelAnimationFrame(frame)
     }
   }, [openRegisterSignal, onRegisterSignalConsumed])
+
+  useEffect(() => {
+    if (openEntitySignal?.type !== 'officer') return undefined
+    const frame = requestAnimationFrame(() => setActiveOfficerId(openEntitySignal.id))
+    return () => cancelAnimationFrame(frame)
+  }, [openEntitySignal])
 
   const officerRoleOptions = useMemo(
     () => Array.from(new Set(officersList.map((officer) => officer.role))).filter(Boolean),
@@ -173,37 +181,29 @@ export default function Officers({
     [officersList, activeOfficerId],
   )
 
-  const selectedEvidence = useMemo(
-    () => evidence.find((entry) => entry.id === activeEvidenceId) || null,
-    [evidence, activeEvidenceId],
-  )
-
   const recentActivity = useMemo(() => {
     if (!selectedOfficer) return []
-
-    const fallback = [
-      {
-        action: 'Checked Out Evidence',
-        evidenceId: evidence[0]?.id || 'EVD-2026-00142',
-        timestamp: '2026-09-19 • 14:18',
-      },
-      {
-        action: 'Checked In Evidence',
-        evidenceId: evidence[1]?.id || 'EVD-2026-00143',
-        timestamp: '2026-09-19 • 17:31',
-      },
-      {
-        action: 'Face Authentication',
-        evidenceId: '—',
-        timestamp: '2026-09-18 • 09:05',
-      },
-    ]
-
-    return fallback.map((entry, index) => ({
-      ...entry,
-      key: `${entry.action}-${entry.evidenceId}-${index}`,
-    }))
-  }, [selectedOfficer, evidence])
+    const transactionEntries = transactions
+      .filter((entry) => entry.officerId === selectedOfficer.id)
+      .map((entry, index) => ({
+        action: entry.action,
+        evidenceId: entry.evidenceId === 'unknown' ? '—' : entry.evidenceId,
+        timestamp: entry.timestamp,
+        sortTime: entry.timestamp,
+        key: `${entry.transactionId}-${index}`,
+      }))
+    const alertEntries = alerts
+      .filter((entry) => entry.officerId === selectedOfficer.id)
+      .map((entry) => ({
+        action: `Security alert: ${entry.title}`,
+        evidenceId: entry.evidenceId === 'unknown' ? '—' : entry.evidenceId,
+        timestamp: new Date(entry.timestamp).toLocaleString(),
+        sortTime: entry.timestamp,
+        key: `alert-${entry.id}`,
+      }))
+    return [...transactionEntries, ...alertEntries]
+      .sort((left, right) => new Date(right.sortTime) - new Date(left.sortTime))
+  }, [selectedOfficer, transactions, alerts])
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -217,6 +217,7 @@ export default function Officers({
   }
 
   const resetRegistrationState = () => {
+    if (preparedOfficerId) void Promise.resolve(onCancelFace?.(preparedOfficerId)).catch(() => {})
     setForm(createEmptyForm())
     setErrors({})
     setFaceAuthenticated(false)
@@ -227,6 +228,8 @@ export default function Officers({
     setCapturedSamples({})
     setRegistrationSucceeded(false)
     setRegisteredOfficer(null)
+    setPreparedOfficerId(null)
+    setFormError('')
     setIsEditMode(false)
     setEditingOfficerId(null)
     stopCamera()
@@ -293,6 +296,7 @@ export default function Officers({
   const handleInputChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: '' }))
+    setFormError('')
   }
 
   const validateForm = () => {
@@ -305,15 +309,6 @@ export default function Officers({
 
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
-  }
-
-  const getNextOfficerId = () => {
-    const extracted = officersList
-      .map((officer) => Number(String(officer.id).replace(/\D/g, '')))
-      .filter((value) => Number.isFinite(value))
-
-    const maxNumber = extracted.length ? Math.max(...extracted) : 703
-    return `OF-${maxNumber + 1}`
   }
 
   const handleCaptureSample = () => {
@@ -346,55 +341,93 @@ export default function Officers({
     }
   }
 
-  const handleCompleteEnrollment = () => {
+  const handleCompleteEnrollment = async () => {
     if (!isEnrollmentReady) return
 
-    setFaceAuthenticated(true)
-    setEnrollmentSuccess(true)
-    setFaceEnrollmentOpen(false)
-    stopCamera()
-  }
-
-  const handleRegisterOfficer = () => {
-    if (!validateForm()) return
-
     if (isEditMode && editingOfficerId) {
-      const updatedOfficer = {
-        ...officersList.find((officer) => officer.id === editingOfficerId),
-        ...form,
-        id: editingOfficerId,
-        name: form.name.trim(),
-        badgeNumber: form.badgeNumber.trim(),
-        role: form.role,
-        status: form.status,
-        faceAuthentication: faceAuthenticated ? 'Enrolled' : 'Not Enrolled',
+      try {
+        await onEnrollFace?.(editingOfficerId, {
+          front_profile: capturedSamples['Front Profile'],
+          left_profile: capturedSamples['Left Profile'],
+          right_profile: capturedSamples['Right Profile'],
+        })
+      } catch (error) {
+        setFormError(error.message || 'Unable to save face enrollment.')
+        return
       }
-
-      setOfficersList((current) =>
-        current.map((item) => (item.id === editingOfficerId ? updatedOfficer : item)),
-      )
-      onUpdateOfficer?.(updatedOfficer)
-      closeRegister()
+      setFaceAuthenticated(true)
+      setEnrollmentSuccess(true)
+      setFaceEnrollmentOpen(false)
+      stopCamera()
       return
     }
 
-    const generatedId = getNextOfficerId()
-    const timestamp = new Date()
-    const registeredOfficerRecord = {
-      id: generatedId,
-      name: form.name.trim(),
-      badgeNumber: form.badgeNumber.trim(),
-      role: form.role,
-      faceAuthentication: faceAuthenticated ? 'Enrolled' : 'Not Enrolled',
-      status: form.status,
-      registered: timestamp.toLocaleDateString('en-CA'),
-      createdAt: timestamp.toISOString(),
+    setIsPreparingEnrollment(true)
+    setFormError('')
+    try {
+      const enrollment = await onPrepareFace?.({
+        'Front Profile': capturedSamples['Front Profile'],
+        'Left Profile': capturedSamples['Left Profile'],
+        'Right Profile': capturedSamples['Right Profile'],
+      })
+      if (!enrollment?.enrolled || !enrollment?.officer_id) {
+        throw new Error('Face enrollment was not confirmed by the server.')
+      }
+      if (preparedOfficerId && preparedOfficerId !== enrollment.officer_id) {
+        void Promise.resolve(onCancelFace?.(preparedOfficerId)).catch(() => {})
+      }
+      setPreparedOfficerId(enrollment.officer_id)
+      setFaceAuthenticated(true)
+      setEnrollmentSuccess(true)
+      setFaceEnrollmentOpen(false)
+      stopCamera()
+    } catch (error) {
+      if (!preparedOfficerId) {
+        setPreparedOfficerId(null)
+        setFaceAuthenticated(false)
+        setSampleIndex(0)
+        setCapturedSamples({})
+      }
+      setFaceEnrollmentOpen(false)
+      stopCamera()
+      setFormError(error.message || 'Unable to enroll these face samples.')
+    } finally {
+      setIsPreparingEnrollment(false)
     }
+  }
 
-    setOfficersList((current) => [registeredOfficerRecord, ...current])
-    onAddOfficer?.(registeredOfficerRecord)
-    setRegisteredOfficer(registeredOfficerRecord)
-    setRegistrationSucceeded(true)
+  const handleRegisterOfficer = async () => {
+    if (isSubmitting) return
+    if (!validateForm()) return
+    if (!isEditMode && (!faceAuthenticated || !preparedOfficerId)) {
+      setFormError('Complete face enrollment before registering this officer.')
+      return
+    }
+    setFormError('')
+    setIsSubmitting(true)
+    const values = { ...form, name: form.name.trim(), badgeNumber: form.badgeNumber.trim() }
+    try {
+      if (isEditMode && editingOfficerId) {
+        const existing = officersList.find((officer) => officer.id === editingOfficerId)
+        const result = await onUpdateOfficer?.({ ...existing, ...values })
+        if (result?.faceError) {
+          setFormError(`Officer details saved, but face enrollment failed: ${result.faceError}`)
+          return
+        }
+        closeRegister()
+        return
+      }
+      const result = await onAddOfficer?.({ ...values }, null, preparedOfficerId)
+      const registered = result?.officer || result
+      if (result?.faceError) setFormError(`Officer registered, but face enrollment failed: ${result.faceError}`)
+      setRegisteredOfficer(registered)
+      setPreparedOfficerId(null)
+      setRegistrationSucceeded(true)
+    } catch (error) {
+      setFormError(error.message || 'Unable to save officer details.')
+    } finally {
+      setIsSubmitting(false)
+    }
     setRegisterOpen(true)
   }
 
@@ -434,11 +467,18 @@ export default function Officers({
     setDeleteTarget(selected || null)
   }
 
-  const confirmOfficerDelete = () => {
+  const confirmOfficerDelete = async () => {
     if (!deleteTarget) return
-    onDeleteOfficer?.(deleteTarget.id)
-    setOfficersList((current) => current.filter((officer) => officer.id !== deleteTarget.id))
-    setDeleteTarget(null)
+    setFormError('')
+    setIsDeleting(true)
+    try {
+      await onDeleteOfficer?.(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (error) {
+      setFormError(error.message || 'Unable to delete officer.')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -520,7 +560,7 @@ export default function Officers({
             if (event.target === event.currentTarget) closeDetails()
           }}
         >
-          <div className="w-full max-w-[1200px] rounded-[22px] border border-slate-200 bg-[#f3f6f8] p-4 shadow-[0_20px_50px_rgba(15,23,42,0.18)] sm:p-5">
+          <div className="max-h-[92vh] w-full max-w-[1200px] overflow-y-auto rounded-[22px] border border-slate-200 bg-[#f3f6f8] p-4 shadow-[0_20px_50px_rgba(15,23,42,0.18)] sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-3 rounded-t-[18px] border-b border-[#dfe7ef] bg-white px-3 py-3">
               <div className="flex items-center gap-3">
                 <span className="text-[1.1rem] font-semibold text-slate-800">Officer Details</span>
@@ -597,17 +637,17 @@ export default function Officers({
                 Face Authentication
               </div>
 
-              <div className="flex flex-col gap-3 rounded-xl border border-[#dfe7ef] bg-[#eafae9] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className={`flex flex-col gap-3 rounded-xl border border-[#dfe7ef] px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${selectedOfficer.faceAuthentication === 'Enrolled' ? 'bg-[#eafae9]' : 'bg-[#f8fafc]'}`}>
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#bbf7d0] bg-[#ecfdf5] text-[#15803d]">
-                    ✓
+                  <span className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${selectedOfficer.faceAuthentication === 'Enrolled' ? 'border-[#bbf7d0] bg-[#ecfdf5] text-[#15803d]' : 'border-[#dfe7ef] bg-white text-slate-500'}`}>
+                    {selectedOfficer.faceAuthentication === 'Enrolled' ? '✓' : '—'}
                   </span>
                   <div>
-                    <div className="inline-flex items-center rounded-full border border-[#bbf7d0] bg-[#ecfdf5] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#15803d]">
-                      Enrolled
+                    <div className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${faceAuthStyles[selectedOfficer.faceAuthentication] || faceAuthStyles['Not Enrolled']}`}>
+                      {selectedOfficer.faceAuthentication}
                     </div>
                     <p className="mt-2 text-sm text-slate-600">
-                      Officer can authenticate at EviLog hardware.
+                      {selectedOfficer.faceAuthentication === 'Enrolled' ? 'Officer can authenticate at EviLog hardware.' : 'Face authentication has not been enrolled for this officer.'}
                     </p>
                   </div>
                 </div>
@@ -643,7 +683,7 @@ export default function Officers({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActiveEvidenceId(entry.evidenceId)}
+                          onClick={() => onOpenEntity?.('evidence', entry.evidenceId)}
                           className="font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
                         >
                           {entry.evidenceId}
@@ -659,74 +699,14 @@ export default function Officers({
         </div>
       )}
 
-      {selectedEvidence && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setActiveEvidenceId(null)
-          }}
-        >
-          <div className="w-full max-w-[740px] rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
-            <div className="mb-4 flex items-center justify-between gap-3 border-b border-[#e9edf2] pb-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Evidence details</p>
-                <h3 className="mt-1 text-[1.8rem] font-semibold tracking-[-0.04em] text-slate-800">
-                  {selectedEvidence.id}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveEvidenceId(null)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Close evidence details"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-[#e6edf4] bg-[#f8fafc] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Evidence Name</p>
-                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.name}</p>
-              </div>
-              <div className="rounded-xl border border-[#e6edf4] bg-[#f8fafc] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Case ID</p>
-                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.caseId}</p>
-              </div>
-              <div className="rounded-xl border border-[#e6edf4] bg-[#f8fafc] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Type</p>
-                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.type}</p>
-              </div>
-              <div className="rounded-xl border border-[#e6edf4] bg-[#f8fafc] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</p>
-                <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.status}</p>
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-xl border border-[#dfe7ef] bg-[#f8fafc] p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Chain of Custody</p>
-              <div className="mt-3 space-y-3">
-                {(selectedEvidence.custodyHistory || []).map((event, index) => (
-                  <div key={`${event.type}-${event.date}-${index}`} className="rounded-xl border border-[#eaeef3] bg-white p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-800">{event.type}</p>
-                      <p className="text-[11px] uppercase tracking-[0.08em] text-slate-500">{event.date}</p>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-600">{event.details || 'System record'}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {deleteTarget && (
         <DeleteConfirmationDialog
           isOpen={Boolean(deleteTarget)}
           title="Delete Officer?"
           message="Are you sure you want to delete"
           itemLabel={deleteTarget.name}
+          errorMessage={formError}
+          isSubmitting={isDeleting}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmOfficerDelete}
           onClose={() => setDeleteTarget(null)}
@@ -818,7 +798,7 @@ export default function Officers({
                     <label className="mb-1.5 block text-sm font-medium text-slate-700">Officer ID</label>
                     <input
                       type="text"
-                      value={isEditMode && editingOfficerId ? editingOfficerId : registeredOfficer ? registeredOfficer.id : 'SYSTEM-GENERATED'}
+                      value={isEditMode && editingOfficerId ? editingOfficerId : preparedOfficerId || (registeredOfficer ? registeredOfficer.id : 'SYSTEM-GENERATED')}
                       readOnly
                       className="h-11 w-full rounded-xl border border-[#dfe7ef] bg-[#f8fafc] px-3 text-sm text-slate-500 outline-none"
                     />
@@ -840,6 +820,8 @@ export default function Officers({
                     />
                   </div>
                 </div>
+
+                {formError && <p className="mt-3 text-sm text-red-600" role="alert">{formError}</p>}
 
                 <div className="mt-5 rounded-[16px] border border-[#e2e8f0] bg-[#f8fafc] p-4">
                   <div className="mb-3 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -880,12 +862,13 @@ export default function Officers({
                   <button
                     type="button"
                     onClick={handleRegisterOfficer}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f1f32]"
+                    disabled={isSubmitting || (!isEditMode && (!faceAuthenticated || !preparedOfficerId))}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0f1f32] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
                       <path d="M12 5v14M5 12h14" />
                     </svg>
-                    {isEditMode ? 'Save Changes' : 'Register Officer'}
+                    {isSubmitting ? 'Saving…' : isEditMode ? 'Save Changes' : 'Register Officer'}
                   </button>
                 </div>
               </div>
@@ -895,6 +878,7 @@ export default function Officers({
                   ✓
                 </div>
                 <h3 className="text-[1.4rem] font-semibold text-slate-800">Officer Registered</h3>
+                {formError && <p className="mt-3 text-sm text-red-600" role="alert">{formError}</p>}
                 <div className="mt-4 space-y-2 text-sm text-slate-700">
                   <p>
                     <span className="font-medium text-slate-600">Officer ID:</span> {registeredOfficer.id}
@@ -1037,9 +1021,10 @@ export default function Officers({
                 <button
                   type="button"
                   onClick={handleCompleteEnrollment}
+                  disabled={isPreparingEnrollment}
                   className="rounded-xl bg-[#12263d] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0f1f32]"
                 >
-                  Continue
+                  {isPreparingEnrollment ? 'Enrolling…' : 'Continue'}
                 </button>
               ) : (
                 <button

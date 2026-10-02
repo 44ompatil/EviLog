@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog'
 import FilterPopover from '../../components/FilterPopover'
 import CasesToolbar from '../../components/CasesToolbar'
@@ -9,6 +9,8 @@ const typeOptions = ['All', 'Digital', 'Weapon', 'Biological', 'Document', 'Phys
 
 const resolveOfficerDisplay = (value, officers = []) => {
   if (!value) return value
+  const exactMatch = officers.find((entry) => entry.id === String(value))
+  if (exactMatch) return `${exactMatch.id} · ${exactMatch.name}`
   const officerIdMatch = String(value).match(/OF-\d+/)
   if (!officerIdMatch) return value
 
@@ -18,20 +20,31 @@ const resolveOfficerDisplay = (value, officers = []) => {
 
 export default function Evidence({
   evidence = [],
-  cases = [],
   officers = [],
+  rfidTags = [],
+  rfidMappings = [],
+  openEntitySignal,
+  onOpenEntity,
   onRegisterEvidence,
   onUpdateEvidence,
   onDeleteEvidence,
 }) {
   const [activeEvidenceId, setActiveEvidenceId] = useState(null)
-  const [activeCaseId, setActiveCaseId] = useState(null)
+  const [activeRfidId, setActiveRfidId] = useState(null)
   const [search, setSearch] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('All')
   const [selectedType, setSelectedType] = useState('All')
   const [filterOpen, setFilterOpen] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [editTarget, setEditTarget] = useState(null)
+  const [actionError, setActionError] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const availableRfidOptions = useMemo(
+    () => rfidTags.filter((tag) => String(tag.status).toLowerCase() === 'available').map((tag) => tag.rfid_id),
+    [rfidTags],
+  )
 
   const filteredEvidence = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -53,8 +66,22 @@ export default function Evidence({
     [evidence, activeEvidenceId],
   )
 
+  useEffect(() => {
+    if (!['evidence', 'rfid'].includes(openEntitySignal?.type)) return undefined
+    const frame = requestAnimationFrame(() => {
+      if (openEntitySignal.type === 'evidence') setActiveEvidenceId(openEntitySignal.id)
+      if (openEntitySignal.type === 'rfid') setActiveRfidId(openEntitySignal.id)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [openEntitySignal])
+
+  const selectedRfid = rfidTags.find((tag) => tag.rfid_id === activeRfidId) || null
+  const rfidHistory = rfidMappings
+    .filter((mapping) => mapping.rfid_id === activeRfidId)
+    .sort((left, right) => new Date(right.assigned_at) - new Date(left.assigned_at))
+  const currentRfidEvidence = evidence.find((entry) => entry.rfid === activeRfidId)
+
   const closeEvidenceDetails = () => setActiveEvidenceId(null)
-  const closeCaseDetails = () => setActiveCaseId(null)
 
   return (
     <div className="w-full bg-[#f3f6f8]">
@@ -101,11 +128,14 @@ export default function Evidence({
         )}
       />
 
+      {actionError && <p className="mx-4 text-sm text-red-600" role="alert">{actionError}</p>}
+
       <div className="p-3 sm:p-4 lg:p-5">
         <EvidenceTable
           rows={filteredEvidence}
           onOpenEvidence={(id) => setActiveEvidenceId(id)}
-          onOpenCase={(id) => setActiveCaseId(id)}
+          onOpenCase={(id) => onOpenEntity?.('case', id)}
+          onOpenRfid={setActiveRfidId}
           onEdit={(row) => setEditTarget(row)}
           onDelete={(row) => setDeleteTarget(row)}
         />
@@ -118,7 +148,7 @@ export default function Evidence({
             if (event.target === event.currentTarget) closeEvidenceDetails()
           }}
         >
-          <div className="w-full max-w-[980px] rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
+          <div className="max-h-[92vh] w-full max-w-[980px] overflow-y-auto rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
             <div className="mb-5 flex items-center justify-between gap-3 border-b border-[#e9edf2] pb-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -170,7 +200,7 @@ export default function Evidence({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Case ID</p>
                   <button
                     type="button"
-                    onClick={() => setActiveCaseId(selectedEvidence.caseId)}
+                    onClick={() => onOpenEntity?.('case', selectedEvidence.caseId)}
                     className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
                   >
                     {selectedEvidence.caseId}
@@ -182,7 +212,9 @@ export default function Evidence({
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned RFID</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.rfid || 'Not Assigned'}</p>
+                  {selectedEvidence.rfid ? (
+                    <button type="button" onClick={() => setActiveRfidId(selectedEvidence.rfid)} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{selectedEvidence.rfid}</button>
+                  ) : <p className="mt-2 text-sm font-semibold text-slate-800">Not Assigned</p>}
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</p>
@@ -239,37 +271,37 @@ export default function Evidence({
         </div>
       )}
 
-      {activeCaseId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+      {selectedRfid && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]" onClick={(event) => { if (event.target === event.currentTarget) setActiveRfidId(null) }}>
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  Case details
-                </p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-800">Case Details</h3>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">RFID details and history</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-800">{selectedRfid.rfid_id}</h3>
               </div>
               <button
                 type="button"
-                onClick={closeCaseDetails}
+                onClick={() => setActiveRfidId(null)}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Close case details"
+                aria-label="Close RFID details"
               >
                 ×
               </button>
             </div>
 
-            <div className="space-y-3 text-sm text-slate-600">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                  Case ID
-                </span>
-                <span className="mt-1 block text-base font-semibold text-slate-800">{activeCaseId}</span>
-              </div>
-              <div className="rounded-xl border border-dashed border-slate-200 p-3">
-                <p className="text-slate-600">
-                  {cases.find((item) => item.id === activeCaseId)?.title || 'Case information loaded.'}
-                </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Current Status</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedRfid.status}</p></div>
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Registered</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedRfid.registered_at ? new Date(selectedRfid.registered_at).toLocaleString() : '—'}</p></div>
+              <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Currently Assigned Evidence</p>{currentRfidEvidence ? <button type="button" onClick={() => { setActiveRfidId(null); onOpenEntity?.('evidence', currentRfidEvidence.id) }} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{currentRfidEvidence.id} · {currentRfidEvidence.name}</button> : <p className="mt-2 text-sm text-slate-600">Not currently assigned</p>}</div>
+              <div className="rounded-xl border border-slate-200 p-3 sm:col-span-2">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Assignment History</p>
+                {rfidHistory.length ? rfidHistory.map((mapping) => (
+                  <div key={mapping.mapping_id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2 first:border-0">
+                    <button type="button" onClick={() => { setActiveRfidId(null); onOpenEntity?.('evidence', mapping.evidence_id) }} className="font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{mapping.evidence_id}</button>
+                    <span className="text-xs text-slate-500">Assigned {new Date(mapping.assigned_at).toLocaleString()}</span>
+                    <span className="text-xs text-slate-500">{mapping.released_at ? `Released ${new Date(mapping.released_at).toLocaleString()}` : selectedRfid.status === 'assigned' && currentRfidEvidence?.id === mapping.evidence_id ? 'Current assignment' : 'Assignment record'}</span>
+                  </div>
+                )) : <p className="text-sm text-slate-500">No assignment history is recorded.</p>}
               </div>
             </div>
           </div>
@@ -295,6 +327,8 @@ export default function Evidence({
                 ×
               </button>
             </div>
+
+            {actionError && <p className="mb-3 text-sm text-red-600" role="alert">{actionError}</p>}
 
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -369,7 +403,7 @@ export default function Evidence({
                     className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                   >
                     <option value="">Select RFID</option>
-                    {['RFID-A7F3-29C1', 'RFID-B2D8-441A', 'RFID-C09E1-7F20', 'RFID-D4B6-93EF', 'RFID-E8A2-1C74', 'RFID-F1D5-8B03'].map((rfid) => (
+                    {[editTarget.rfid, ...availableRfidOptions].filter((rfid, index, values) => rfid && values.indexOf(rfid) === index).map((rfid) => (
                       <option key={rfid} value={rfid}>
                         {rfid}
                       </option>
@@ -415,19 +449,28 @@ export default function Evidence({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    onUpdateEvidence?.({
+                  disabled={isSaving}
+                  onClick={async () => {
+                    setActionError('')
+                    setIsSaving(true)
+                    try {
+                      await onUpdateEvidence?.({
                       ...editTarget,
                       name: editTarget.name.trim() || editTarget.name,
                       type: editTarget.type,
                       status: editTarget.status,
                       rfid: editTarget.rfid,
                     })
-                    setEditTarget(null)
+                      setEditTarget(null)
+                    } catch (error) {
+                      setActionError(error.message || 'Unable to update evidence.')
+                    } finally {
+                      setIsSaving(false)
+                    }
                   }}
-                  className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32]"
+                  className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Save Changes
+                  {isSaving ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -441,11 +484,21 @@ export default function Evidence({
           title="Delete Evidence?"
           message="Are you sure you want to delete"
           itemLabel={deleteTarget.name}
+          errorMessage={actionError}
+          isSubmitting={isDeleting}
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={() => {
-            onDeleteEvidence?.(deleteTarget.id)
-            setDeleteTarget(null)
-            closeEvidenceDetails()
+          onConfirm={async () => {
+            setActionError('')
+            setIsDeleting(true)
+            try {
+              await onDeleteEvidence?.(deleteTarget.id)
+              setDeleteTarget(null)
+              closeEvidenceDetails()
+            } catch (error) {
+              setActionError(error.message || 'Unable to delete evidence.')
+            } finally {
+              setIsDeleting(false)
+            }
           }}
           onClose={() => setDeleteTarget(null)}
         />

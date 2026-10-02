@@ -137,3 +137,12 @@ def test_api_behavior_for_successful_recognition():
             assert payload["officer_id"] == "OF-703"
             assert payload["similarity"] >= 0.99
             assert payload["message"] == "Face recognized and matched to an active officer."
+
+
+def test_real_face_inference_service_detect_faces_on_empty_image():
+    from app.services.face_inference_service import FaceInferenceService
+    service = FaceInferenceService()
+    image = np.zeros((480, 640, 3), dtype=np.uint8)
+    faces = service.detect_faces(image)
+    assert faces == []
+

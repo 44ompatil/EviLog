@@ -1,19 +1,9 @@
 import { useMemo, useState } from 'react'
-import { getAvailableRfidOptions, rfidCatalog } from '../../data/rfidData'
-
-function getNextEvidenceId(existingEvidence = []) {
-  const numericIds = existingEvidence
-    .map((entry) => Number(String(entry.id).match(/(\d+)$/)?.[1] || '0'))
-    .filter((value) => Number.isFinite(value))
-
-  const nextValue = numericIds.length ? Math.max(...numericIds) + 1 : 142
-  return `EVD-${new Date().getFullYear()}-${String(nextValue).padStart(5, '0')}`
-}
 
 export default function RegisterEvidenceOverlay({
   isOpen,
   cases = [],
-  evidence = [],
+  rfidTags = [],
   currentlyAssignedRfids = [],
   onClose,
   onRegister,
@@ -28,10 +18,12 @@ export default function RegisterEvidenceOverlay({
   })
   const [errors, setErrors] = useState({})
   const [successState, setSuccessState] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [apiError, setApiError] = useState('')
 
   const availableRfidOptions = useMemo(
-    () => getAvailableRfidOptions(evidence).filter((tag) => !currentlyAssignedRfids.includes(tag)),
-    [evidence, currentlyAssignedRfids],
+    () => rfidTags.filter((tag) => !currentlyAssignedRfids.includes(tag)),
+    [rfidTags, currentlyAssignedRfids],
   )
 
   const resetForm = () => {
@@ -45,6 +37,7 @@ export default function RegisterEvidenceOverlay({
     })
     setErrors({})
     setSuccessState(null)
+    setApiError('')
   }
 
   const closeOverlay = () => {
@@ -64,24 +57,28 @@ export default function RegisterEvidenceOverlay({
     return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return
     if (!validateForm()) return
 
-    const generatedId = getNextEvidenceId(evidence)
     const nextRecord = {
-      id: generatedId,
       caseId: selectedCaseId,
       name: form.name.trim(),
       type: form.type,
       description: form.description.trim(),
       rfid: form.rfid,
       status: form.status,
-      registered: new Date().toISOString().slice(0, 10),
-      createdAt: new Date().toISOString(),
     }
-
-    setSuccessState(nextRecord)
-    onRegister?.(nextRecord)
+    setApiError('')
+    setIsSubmitting(true)
+    try {
+      const saved = await onRegister?.(nextRecord)
+      setSuccessState({ ...nextRecord, ...saved })
+    } catch (error) {
+      setApiError(error.message || 'Unable to register evidence.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (!isOpen) return null
@@ -232,7 +229,7 @@ export default function RegisterEvidenceOverlay({
                   <input
                     type="text"
                     readOnly
-                    value={getNextEvidenceId(evidence)}
+                    value="System-generated"
                     className="h-11 w-full rounded-xl border border-[#dfe7ef] bg-[#f8fafc] px-3 text-sm text-slate-500 outline-none"
                   />
                 </div>
@@ -241,12 +238,14 @@ export default function RegisterEvidenceOverlay({
                   <input
                     type="text"
                     readOnly
-                    value={new Date().toISOString().slice(0, 10)}
+                    value="On registration"
                     className="h-11 w-full rounded-xl border border-[#dfe7ef] bg-[#f8fafc] px-3 text-sm text-slate-500 outline-none"
                   />
                 </div>
               </div>
             </div>
+
+            {apiError && <p className="mt-3 text-sm text-red-600" role="alert">{apiError}</p>}
 
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
@@ -259,9 +258,10 @@ export default function RegisterEvidenceOverlay({
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32]"
+                disabled={isSubmitting}
+                className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Register Evidence
+                {isSubmitting ? 'Registering…' : 'Register Evidence'}
               </button>
             </div>
           </>

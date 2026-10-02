@@ -10,6 +10,7 @@ const statusOptions = ['All', 'Open', 'Investigating', 'Pending Review', 'Resolv
 
 export default function SecurityAlerts({
   alerts = [],
+  onOpenEntity,
   onMarkAlertAsRead,
   onMarkAllAlertsAsRead,
 }) {
@@ -49,6 +50,7 @@ export default function SecurityAlerts({
   const unreadCount = alerts.filter((alert) => !alert.read).length
   const criticalCount = alerts.filter((alert) => alert.severity === 'Critical').length
   const resolvedCount = alerts.filter((alert) => alert.status === 'Resolved').length
+  const activeCount = alerts.filter((alert) => alert.status !== 'Resolved').length
 
   const handleOpenAlert = (alert) => {
     onMarkAlertAsRead?.(alert.id)
@@ -163,7 +165,7 @@ export default function SecurityAlerts({
               </p>
               <div className="mt-3 flex items-end justify-between">
                 <span className="text-3xl font-semibold text-slate-800">{alerts.length}</span>
-                <span className="text-sm text-slate-500">8 active</span>
+                <span className="text-sm text-slate-500">{activeCount} active</span>
               </div>
             </div>
 
@@ -216,10 +218,12 @@ export default function SecurityAlerts({
               </div>
             ) : (
               filteredAlerts.map((alert) => (
-                <button
+                <div
                   key={alert.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleOpenAlert(alert)}
+                  onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return; event.preventDefault(); handleOpenAlert(alert) }}
                   className="grid w-full grid-cols-[1.3fr_1.2fr_2.3fr_1.2fr_1.1fr_1fr_1.1fr_1fr] items-center gap-3 border-b border-[#edf1f5] px-3 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
                 >
                   <div className="flex items-center gap-2">
@@ -228,8 +232,12 @@ export default function SecurityAlerts({
                   </div>
                   <span>{alert.type}</span>
                   <span className="text-slate-600">{alert.description}</span>
-                  <span>{alert.evidenceId}</span>
-                  <span>{alert.officerId}</span>
+                  {alert.evidenceId && !['—', 'unknown'].includes(alert.evidenceId.toLowerCase()) ? (
+                    <button type="button" onClick={(event) => { event.stopPropagation(); onOpenEntity?.('evidence', alert.evidenceId) }} className="text-left font-medium text-[#1f5ea8] underline-offset-2 hover:underline">{alert.evidenceId}</button>
+                  ) : <span>{alert.evidenceId}</span>}
+                  {alert.officerId && !['—', 'unknown'].includes(alert.officerId.toLowerCase()) ? (
+                    <button type="button" onClick={(event) => { event.stopPropagation(); onOpenEntity?.('officer', alert.officerId) }} className="text-left font-medium text-[#1f5ea8] underline-offset-2 hover:underline">{alert.officerId}</button>
+                  ) : <span>{alert.officerId}</span>}
                   <span>
                     <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-semibold ${getSeverityTone(alert.severity)}`}>
                       {alert.severity}
@@ -241,7 +249,7 @@ export default function SecurityAlerts({
                       {alert.status}
                     </span>
                   </span>
-                </button>
+                </div>
               ))
             )}
           </section>
@@ -254,7 +262,7 @@ export default function SecurityAlerts({
           onClick={() => setSelectedAlert(null)}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -294,13 +302,13 @@ export default function SecurityAlerts({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Evidence ID
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedAlert.evidenceId}</p>
+                  {selectedAlert.evidenceId && !['—', 'unknown'].includes(selectedAlert.evidenceId.toLowerCase()) ? <button type="button" onClick={() => { setSelectedAlert(null); onOpenEntity?.('evidence', selectedAlert.evidenceId) }} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{selectedAlert.evidenceId}</button> : <p className="mt-2 text-sm font-semibold text-slate-800">{selectedAlert.evidenceId}</p>}
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Officer ID
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedAlert.officerId}</p>
+                  {selectedAlert.officerId && !['—', 'unknown'].includes(selectedAlert.officerId.toLowerCase()) ? <button type="button" onClick={() => { setSelectedAlert(null); onOpenEntity?.('officer', selectedAlert.officerId) }} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{selectedAlert.officerId}</button> : <p className="mt-2 text-sm font-semibold text-slate-800">{selectedAlert.officerId}</p>}
                 </div>
                 <div className="rounded-xl bg-slate-50 p-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">

@@ -7,6 +7,8 @@ export default function DeleteConfirmationDialog({
   onCancel,
   onConfirm,
   onClose,
+  errorMessage = '',
+  isSubmitting = false,
 }) {
   if (!isOpen) return null
 
@@ -37,6 +39,7 @@ export default function DeleteConfirmationDialog({
         </div>
 
         <div className="space-y-4">
+          {errorMessage && <p className="text-sm text-red-600" role="alert">{errorMessage}</p>}
           <p className="text-sm leading-6 text-slate-600">
             {message}{' '}
             {itemLabel && <span className="font-semibold text-slate-800">&ldquo;{itemLabel}&rdquo;</span>}
@@ -57,9 +60,10 @@ export default function DeleteConfirmationDialog({
             <button
               type="button"
               onClick={onConfirm}
+              disabled={isSubmitting}
               className="rounded-xl border border-red-200 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500"
             >
-              {confirmText}
+              {isSubmitting ? 'Deleting…' : confirmText}
             </button>
           </div>
         </div>
