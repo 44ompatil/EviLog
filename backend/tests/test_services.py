@@ -44,8 +44,10 @@ class FakeCollection:
                 return document
         return None
 
-    def find(self):
-        return list(self.documents)
+    def find(self, query=None):
+        if query is None:
+            return list(self.documents)
+        return [document for document in self.documents if all(document.get(key) == value for key, value in query.items())]
 
     def update_one(self, query, update):
         for document in self.documents:
@@ -54,6 +56,13 @@ class FakeCollection:
                     document.update(update["$set"])
                 return SimpleNamespace(modified_count=1)
         return SimpleNamespace(modified_count=0)
+
+    def delete_one(self, query):
+        for index, document in enumerate(self.documents):
+            if all(document.get(key) == value for key, value in query.items()):
+                del self.documents[index]
+                return SimpleNamespace(deleted_count=1)
+        return SimpleNamespace(deleted_count=0)
 
 
 class FakeDatabase:
@@ -64,6 +73,10 @@ class FakeDatabase:
             "officers": FakeCollection(),
             "rfid_tags": FakeCollection(),
             "rfid_mappings": FakeCollection(),
+            "transactions": FakeCollection(),
+            "chain_of_custody": FakeCollection(),
+            "security_alerts": FakeCollection(),
+            "face_embeddings": FakeCollection(),
         }
 
     def __getitem__(self, name):

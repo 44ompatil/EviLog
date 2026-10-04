@@ -19,6 +19,7 @@ COLLECTIONS = (
     "security_alerts",
     "transactions",
     "chain_of_custody",
+    "face_embeddings",
 )
 
 INDEX_DEFINITIONS: dict[str, list[tuple[str | tuple[str, int], dict[str, Any]]]] = {
@@ -69,6 +70,9 @@ INDEX_DEFINITIONS: dict[str, list[tuple[str | tuple[str, int], dict[str, Any]]]]
         ("transaction_id", {"name": "idx_custody_transaction_id"}),
         ("officer_id", {"name": "idx_custody_officer_id"}),
         ("timestamp", {"name": "idx_custody_timestamp"}),
+    ],
+    "face_embeddings": [
+        ("officer_id", {"name": "idx_face_embedding_officer_id"}),
     ],
 }
 

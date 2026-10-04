@@ -8,6 +8,7 @@ from app.services import (
     ServiceError,
     assign_rfid_to_evidence,
     get_rfid_tag,
+    list_rfid_mappings,
     list_rfid_tags,
     register_rfid_tag,
     release_rfid_from_evidence,
@@ -31,7 +32,7 @@ def _raise_for_service_error(exc: ServiceError) -> None:
     message = str(exc)
     if "already exists" in message.lower():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message) from exc
-    if "already assigned" in message.lower():
+    if "already assigned" in message.lower() or "already has an assigned" in message.lower():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=message) from exc
     if "not found" in message.lower():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
@@ -49,6 +50,11 @@ def create_rfid_tag_endpoint(payload: RFIDTagCreate) -> RFIDTagResponse:
 @router.get("/rfid", response_model=list[RFIDTagResponse])
 def list_rfid_tags_endpoint() -> list[RFIDTagResponse]:
     return list_rfid_tags()
+
+
+@router.get("/rfid/mappings", response_model=list[RFIDMappingResponse])
+def list_rfid_mappings_endpoint() -> list[RFIDMappingResponse]:
+    return list_rfid_mappings()
 
 
 @router.get("/rfid/{rfid_id}", response_model=RFIDTagResponse)

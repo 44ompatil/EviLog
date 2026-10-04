@@ -41,6 +41,13 @@ def _safe_value(value: str | None, fallback: str = "unknown") -> str:
     return value if value and value.strip() else fallback
 
 
+def _timestamp_sort_key(value: datetime | None) -> float:
+    if value is None:
+        return float("-inf")
+    normalized = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+    return normalized.timestamp()
+
+
 def validate_hardware_event(
     officer_id: str,
     rfid_id: str,
@@ -64,7 +71,14 @@ def validate_hardware_event(
     if tag.get("status") != "assigned":
         raise HardwareEventError(f"RFID tag {rfid_id} is not assigned to evidence")
 
-    mapping = database["rfid_mappings"].find_one({"rfid_id": rfid_id})
+    historical_mappings = [
+        item for item in database["rfid_mappings"].find() if item.get("rfid_id") == rfid_id
+    ]
+    mapping = max(
+        historical_mappings,
+        key=lambda item: _timestamp_sort_key(item.get("assigned_at")),
+        default=None,
+    )
     if mapping is None:
         raise HardwareEventError(f"RFID tag {rfid_id} is not assigned to an evidence item")
 

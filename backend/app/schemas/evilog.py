@@ -19,7 +19,17 @@ class OfficerBase(EviLogBaseModel):
 
 
 class OfficerCreate(OfficerBase):
-    pass
+    officer_id: str | None = Field(default=None, min_length=1)
+    registered_at: datetime | None = None
+
+
+class OfficerFaceRegistrationCreate(EviLogBaseModel):
+    officer_id: str | None = Field(default=None, min_length=1)
+    name: str = Field(..., min_length=1)
+    badge_number: str = Field(..., min_length=1)
+    role: str = Field(..., min_length=1)
+    status: str = Field(..., min_length=1)
+    face_samples: dict[str, str] | None = None
 
 
 class OfficerUpdate(EviLogBaseModel):
@@ -32,7 +42,7 @@ class OfficerUpdate(EviLogBaseModel):
 
 
 class OfficerResponse(OfficerBase):
-    pass
+    face_enrolled: bool = False
 
 
 class CaseBase(EviLogBaseModel):
@@ -46,7 +56,8 @@ class CaseBase(EviLogBaseModel):
 
 
 class CaseCreate(CaseBase):
-    pass
+    case_id: str | None = Field(default=None, min_length=1)
+    created_at: datetime | None = None
 
 
 class CaseUpdate(EviLogBaseModel):
@@ -74,7 +85,8 @@ class EvidenceBase(EviLogBaseModel):
 
 
 class EvidenceCreate(EvidenceBase):
-    pass
+    evidence_id: str | None = Field(default=None, min_length=1)
+    registered_at: datetime | None = None
 
 
 class EvidenceUpdate(EviLogBaseModel):
@@ -117,6 +129,7 @@ class RFIDMappingBase(EviLogBaseModel):
     evidence_id: str = Field(..., min_length=1)
     assigned_to: str = Field(..., min_length=1)
     assigned_at: datetime
+    released_at: datetime | None = None
 
 
 class RFIDMappingCreate(RFIDMappingBase):
@@ -129,6 +142,7 @@ class RFIDMappingUpdate(EviLogBaseModel):
     evidence_id: str | None = Field(default=None, min_length=1)
     assigned_to: str | None = Field(default=None, min_length=1)
     assigned_at: datetime | None = None
+    released_at: datetime | None = None
 
 
 class RFIDMappingResponse(RFIDMappingBase):
@@ -145,6 +159,7 @@ class SecurityAlertBase(EviLogBaseModel):
     message: str = Field(..., min_length=1)
     status: str = Field(..., min_length=1)
     timestamp: datetime
+    read: bool = False
 
 
 class SecurityAlertCreate(SecurityAlertBase):
