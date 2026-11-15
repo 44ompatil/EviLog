@@ -1,0 +1,20 @@
+# EviLog Hardware — Git Ignore
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+.pioenvs
+
+# Credentials — NEVER commit config.h (use config.h.example)
+include/config.h
+
+# IDE files
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+

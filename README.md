@@ -7,7 +7,7 @@ Low-cost, hardware-assisted evidence tracking system that digitally records evid
 - Frontend: React + Vite + Tailwind CSS
 - Backend: Python 3.12+ + FastAPI
 - Database: MongoDB
-- Hardware: ESP32-S3 + RFID + physical presence sensor + camera
+- Hardware: ESP32 + RFID + physical presence sensor + camera
 
 ## Development
 
@@ -68,7 +68,7 @@ The hardware identifies the officer and evidence, detects physical presence/remo
 EviLog/
 ├── frontend/                 # React application
 ├── backend/                  # FastAPI application
-├── hardware/                 # ESP32-S3 firmware
+├── hardware/                 # ESP32 firmware
 ├── docs/                     # Project documentation
 ├── module testing/           # Hardware/module testing
 ├── requirements.txt          # Backend dependencies
