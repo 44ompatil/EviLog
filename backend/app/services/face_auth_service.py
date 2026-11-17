@@ -134,9 +134,9 @@ def authenticate_face(
     if database is None:
         database = get_database()
 
-    face_embeddings = database.get("face_embeddings") if hasattr(database, "get") else getattr(database, "collections", {}).get("face_embeddings")
-    officers = database.get("officers") if hasattr(database, "get") else getattr(database, "collections", {}).get("officers")
-
+    face_embeddings = database["face_embeddings"]
+    officers = database["officers"]
+    
     if face_embeddings is None or officers is None:
         return _unauthenticated_result("Face not recognized.")
 

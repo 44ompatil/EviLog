@@ -27,7 +27,8 @@ class FaceEnrollmentPreparationRequest(BaseModel):
 def recognize_face_endpoint(payload: FaceAuthRequest) -> dict[str, object]:
     try:
         return authenticate_face(payload.image, threshold=payload.threshold)
-    except Exception:
+    except Exception as exc:
+        print(f"FACE AUTH ERROR: {type(exc).__name__}: {exc}")
         return {
             "authenticated": False,
             "officer_id": None,
