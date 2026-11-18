@@ -45,11 +45,15 @@ def _generated_id(prefix: str) -> str:
     return f"{prefix}-{_now().year}-{uuid4().hex[:8].upper()}"
 
 
-def _datetime_sort_key(value: datetime | None) -> float:
-    if value is None:
+def _datetime_sort_key(value: object) -> float:
+    normalized = _legacy_datetime(value)
+    if normalized is None:
         return float("-inf")
-    normalized = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
-    return normalized.timestamp()
+    normalized = normalized.replace(tzinfo=timezone.utc) if normalized.tzinfo is None else normalized
+    try:
+        return normalized.timestamp()
+    except (OverflowError, OSError, ValueError):
+        return float("-inf")
 
 
 def _ensure_unique(collection, field: str, value: str, entity_name: str) -> None:
@@ -76,13 +80,77 @@ def _legacy_datetime(value: object) -> datetime | None:
     return None
 
 
+def _object_id_datetime(document: dict) -> datetime | None:
+    generation_time = getattr(document.get("_id"), "generation_time", None)
+    return generation_time if isinstance(generation_time, datetime) else None
+
+
+def _normalize_evidence_document(collection, document: dict) -> dict:
+    """Backfill missing response fields from legacy aliases without replacing data."""
+    normalized = dict(document)
+    updates: dict[str, object] = {}
+    evidence_id = normalized.get("evidence_id")
+
+    if not isinstance(normalized.get("evidence_name"), str) or not normalized["evidence_name"].strip():
+        for legacy_key in ("evidenceName", "item_name", "itemName", "name", "title"):
+            value = normalized.get(legacy_key)
+            if isinstance(value, str) and value.strip():
+                updates["evidence_name"] = value.strip()
+                break
+        if "evidence_name" not in updates:
+            description = normalized.get("description")
+            updates["evidence_name"] = (
+                description.strip() if isinstance(description, str) and description.strip()
+                else f"Evidence {evidence_id or 'record'}"
+            )
+            logger.warning(
+                "Evidence %s has no name field or legacy alias; using a clearly labeled display name",
+                evidence_id or "<missing id>",
+            )
+
+    if not isinstance(normalized.get("evidence_type"), str) or not normalized["evidence_type"].strip():
+        for legacy_key in ("evidenceType", "item_type", "itemType", "type", "category"):
+            value = normalized.get(legacy_key)
+            if isinstance(value, str) and value.strip():
+                updates["evidence_type"] = value.strip()
+                break
+        if "evidence_type" not in updates:
+            updates["evidence_type"] = "unknown"
+            logger.warning(
+                "Evidence %s has no type field or legacy alias; marking its type as unknown",
+                evidence_id or "<missing id>",
+            )
+
+    registered_at = _legacy_datetime(normalized.get("registered_at"))
+    if registered_at is None:
+        for legacy_key in ("registeredAt", "registration_date", "created_at", "createdAt", "timestamp"):
+            registered_at = _legacy_datetime(normalized.get(legacy_key))
+            if registered_at is not None:
+                break
+        registered_at = registered_at or _object_id_datetime(normalized)
+        if registered_at is None:
+            registered_at = _now()
+            logger.warning(
+                "Evidence %s has no usable registration timestamp; assigning the current UTC time",
+                evidence_id or "<missing id>",
+            )
+        updates["registered_at"] = registered_at
+
+    if updates:
+        normalized.update(updates)
+        if evidence_id:
+            collection.update_one({"evidence_id": evidence_id}, {"$set": updates})
+            logger.info("Backfilled missing legacy fields for evidence %s: %s", evidence_id, ", ".join(updates))
+    return normalized
+
+
 def _normalize_officer_document(collection, document: dict) -> dict | None:
     """Backfill equivalent legacy field names; never fabricate required values."""
     normalized = dict(document)
     updates: dict[str, object] = {}
 
     if not normalized.get("badge_number"):
-        for legacy_key in ("badgeNumber", "badge_no", "badge"):
+        for legacy_key in ("badgeNumber", "badgeId", "badge_id", "badge_no", "badge"):
             legacy_value = normalized.get(legacy_key)
             if isinstance(legacy_value, str) and legacy_value.strip():
                 updates["badge_number"] = legacy_value.strip()
@@ -102,7 +170,9 @@ def _normalize_officer_document(collection, document: dict) -> dict | None:
     missing_fields = [field for field in required_fields if not normalized.get(field)]
     if missing_fields:
         logger.warning(
-            "Omitting incomplete officer document from API response; missing required fields: %s",
+            "Omitting incomplete officer %s from API response; missing required fields: %s. "
+            "The MongoDB record is retained and requires a real badge number where applicable",
+            officer_id or "<missing id>",
             ", ".join(missing_fields),
         )
         return None
@@ -174,13 +244,17 @@ def get_evidence(evidence_id: str) -> EvidenceResponse | None:
     document = database["evidence"].find_one({"evidence_id": evidence_id})
     if document is None:
         return None
+    document = _normalize_evidence_document(database["evidence"], document)
     return EvidenceResponse.model_validate(document)
 
 
 def list_evidence() -> list[EvidenceResponse]:
     database = get_database()
     documents = database["evidence"].find()
-    return [EvidenceResponse.model_validate(document) for document in documents]
+    return [
+        EvidenceResponse.model_validate(_normalize_evidence_document(database["evidence"], document))
+        for document in documents
+    ]
 
 
 def update_evidence(evidence_id: str, data: EvidenceUpdate) -> EvidenceResponse:
@@ -469,8 +543,30 @@ def list_evidence_custody(evidence_id: str) -> list[dict]:
 def list_transactions() -> list[TransactionResponse]:
     database = get_database()
     records = list(database["transactions"].find())
-    records.sort(key=lambda item: _datetime_sort_key(item.get("timestamp")), reverse=True)
-    return [TransactionResponse.model_validate(item) for item in records]
+    normalized_records = []
+    for record in records:
+        normalized = dict(record)
+        raw_timestamp = normalized.get("timestamp")
+        timestamp = _legacy_datetime(raw_timestamp)
+        if timestamp is None:
+            timestamp = _object_id_datetime(normalized)
+            if timestamp is not None:
+                logger.warning(
+                    "Transaction %s has a missing or invalid timestamp (%r); using its MongoDB creation time",
+                    normalized.get("transaction_id", "<missing id>"),
+                    raw_timestamp,
+                )
+        if timestamp is None:
+            logger.warning(
+                "Skipping transaction %s from API response because its timestamp is missing or invalid "
+                "and no MongoDB creation time is available",
+                normalized.get("transaction_id", "<missing id>"),
+            )
+            continue
+        normalized["timestamp"] = timestamp
+        normalized_records.append(normalized)
+    normalized_records.sort(key=lambda item: _datetime_sort_key(item.get("timestamp")), reverse=True)
+    return [TransactionResponse.model_validate(item) for item in normalized_records]
 
 
 def list_security_alerts() -> list[SecurityAlertResponse]:

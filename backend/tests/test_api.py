@@ -100,6 +100,46 @@ def test_health_check(client):
     assert response.json()["status"] == "ok"
 
 
+def test_transactions_endpoint_sorts_mixed_timestamps_and_skips_unrecoverable_rows(client):
+    collection = client.app.state.fake_db.collections["transactions"]
+    collection.insert_one({
+        "transaction_id": "TX-OLD",
+        "evidence_id": "EV-1",
+        "officer_id": "OF-1",
+        "action": "check_in",
+        "timestamp": "2025-01-01T10:00:00",
+    })
+    collection.insert_one({
+        "transaction_id": "TX-NEW",
+        "evidence_id": "EV-1",
+        "officer_id": "OF-1",
+        "action": "check_out",
+        "timestamp": "2025-03-01T10:00:00+00:00",
+    })
+    collection.insert_one({
+        "_id": SimpleNamespace(generation_time=datetime(2025, 2, 1, 10, 0)),
+        "transaction_id": "TX-RECOVERED",
+        "evidence_id": "EV-1",
+        "officer_id": "OF-1",
+        "action": "transfer",
+        "timestamp": "not-a-date",
+    })
+    collection.insert_one({
+        "transaction_id": "TX-INVALID",
+        "evidence_id": "EV-1",
+        "officer_id": "OF-1",
+        "action": "transfer",
+        "timestamp": "not-a-date",
+    })
+
+    response = client.get("/api/transactions")
+    assert response.status_code == 200
+    assert [record["transaction_id"] for record in response.json()] == [
+        "TX-NEW", "TX-RECOVERED", "TX-OLD",
+    ]
+    assert response.json()[1]["timestamp"].startswith("2025-02-01T10:00:00")
+
+
 def test_case_crud_and_validation(client):
     payload = {
         "case_id": "CASE-101",
@@ -175,6 +215,41 @@ def test_evidence_api_for_valid_case_and_missing_case_reference(client):
         },
     )
     assert invalid_missing_case.status_code == 404
+
+
+def test_evidence_list_backfills_legacy_fields_without_dropping_records(client):
+    collection = client.app.state.fake_db.collections["evidence"]
+    collection.insert_one({
+        "_id": SimpleNamespace(generation_time=datetime(2025, 2, 1, 10, 0)),
+        "evidence_id": "EV-LEGACY",
+        "case_id": "CASE-LEGACY",
+        "name": "Recovered laptop",
+        "category": "digital",
+        "description": "Laptop recovered from the scene",
+        "status": "stored",
+        "created_at": "2025-02-01T10:00:00+00:00",
+        "legacy_note": "preserve this value",
+    })
+    collection.insert_one({
+        "evidence_id": "EV-METADATA-MISSING",
+        "case_id": "CASE-LEGACY",
+        "description": "Evidence with unavailable classification",
+        "status": "stored",
+    })
+
+    response = client.get("/api/evidence")
+    assert response.status_code == 200
+    records = {record["evidence_id"]: record for record in response.json()}
+    assert len(records) == 2
+    assert records["EV-LEGACY"]["evidence_name"] == "Recovered laptop"
+    assert records["EV-LEGACY"]["evidence_type"] == "digital"
+    assert records["EV-LEGACY"]["registered_at"].startswith("2025-02-01T10:00:00")
+    assert records["EV-METADATA-MISSING"]["evidence_type"] == "unknown"
+
+    legacy_record = collection.find_one({"evidence_id": "EV-LEGACY"})
+    assert legacy_record["legacy_note"] == "preserve this value"
+    assert legacy_record["evidence_name"] == "Recovered laptop"
+    assert legacy_record["evidence_type"] == "digital"
 
 
 def test_officer_api_requires_face_samples_and_returns_enrolled_officer(client):
@@ -272,17 +347,27 @@ def test_officer_list_normalizes_legacy_fields_without_inventing_badges(client):
             "status": "active",
             "created_at": "2025-04-02T09:30:00+00:00",
         },
+        {
+            "officer_id": "OF-LEGACY-BADGE-ID",
+            "name": "Legacy Badge ID Record",
+            "badge_id": "REAL-BADGE-45",
+            "role": "Inspector",
+            "status": "active",
+            "created_at": "2025-04-03T09:30:00+00:00",
+        },
     ])
 
     response = client.get("/api/officers")
     assert response.status_code == 200
     records = response.json()
-    assert len(records) == 1
-    record = records[0]
+    assert len(records) == 2
+    record = next(item for item in records if item["officer_id"] == "OF-LEGACY-ALIAS")
     assert record["officer_id"] == "OF-LEGACY-ALIAS"
     assert record["badge_number"] == "REAL-BADGE-44"
     assert record["registered_at"] == "2025-04-02T09:30:00Z"
     assert record["face_enrolled"] is False
+    badge_id_record = next(item for item in records if item["officer_id"] == "OF-LEGACY-BADGE-ID")
+    assert badge_id_record["badge_number"] == "REAL-BADGE-45"
 
     incomplete = collection.find_one({"officer_id": "OF-LEGACY-MISSING-BADGE"})
     assert "badge_number" not in incomplete
