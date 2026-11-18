@@ -1,52 +1,83 @@
-const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
+const baseUrl = (
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(message, statusCode = 0) {
-    super(message)
-    this.name = 'ApiError'
-    this.statusCode = statusCode
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
   }
 }
 
 export async function request(path, options = {}) {
-  let response
+  let response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
       ...options,
       headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
         ...options.headers,
       },
-    })
+    });
   } catch {
-    throw new ApiError('The EviLog API is unavailable. Check the backend connection and try again.')
+    throw new ApiError(
+      "The EviLog API is unavailable. Check the backend connection and try again.",
+    );
   }
 
   if (response.status === 204) {
-    if (!response.ok) throw new ApiError('The request could not be completed.', response.status)
-    return null
+    if (!response.ok)
+      throw new ApiError(
+        "The request could not be completed.",
+        response.status,
+      );
+    return null;
   }
 
-  let body
+  let body;
   try {
-    body = await response.json()
+    body = await response.json();
   } catch {
-    body = null
+    body = null;
   }
 
   if (!response.ok) {
-    const detail = typeof body?.detail === 'string' ? body.detail : ''
-    const message = response.status === 409
-      ? (detail || 'This record conflicts with existing data.')
-      : response.status === 404
-        ? (detail || 'The requested record was not found.')
-        : response.status === 422
-          ? 'Please check the entered information and try again.'
-          : 'The request could not be completed. Please try again.'
-    throw new ApiError(message, response.status)
+    const detail = typeof body?.detail === "string" ? body.detail : "";
+    const message =
+      response.status === 409
+        ? detail || "This record conflicts with existing data."
+        : response.status === 404
+          ? detail || "The requested record was not found."
+          : response.status === 422
+            ? "Please check the entered information and try again."
+            : "The request could not be completed. Please try again.";
+    throw new ApiError(message, response.status);
   }
 
-  return body
+  return body;
 }
 
-export const jsonBody = (value) => ({ body: JSON.stringify(value) })
+export const healthApi = {
+  async check() {
+    try {
+      const response = await fetch(`${baseUrl}/api/health`, {
+        headers: { Accept: "application/json" },
+      });
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        // An HTTP response still proves that the server is reachable.
+      }
+      return {
+        reachable: true,
+        healthy: response.ok && body?.status === "ok",
+      };
+    } catch {
+      return { reachable: false, healthy: false };
+    }
+  },
+};
+
+export const jsonBody = (value) => ({ body: JSON.stringify(value) });

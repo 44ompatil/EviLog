@@ -1,58 +1,81 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   formatRelativeTime,
   getSeverityTone,
   getUnreadAlertCount,
-} from '../data/securityAlertsData'
+} from "../data/securityAlertsData";
 
 export default function Header({
-  title = 'Dashboard',
-  subtitle = 'Overview of evidence and station activity',
+  title = "Dashboard",
+  subtitle = "Overview of evidence and station activity",
   alerts = [],
+  backendStatus = "checking",
   onMarkAlertAsRead,
   onMarkAllAlertsAsRead,
 }) {
-  const navigate = useNavigate()
-  const containerRef = useRef(null)
-  const [isAlertMenuOpen, setIsAlertMenuOpen] = useState(false)
-  const [selectedAlert, setSelectedAlert] = useState(null)
+  const navigate = useNavigate();
+  const containerRef = useRef(null);
+  const [isAlertMenuOpen, setIsAlertMenuOpen] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState(null);
 
-  const unreadCount = getUnreadAlertCount(alerts)
+  const unreadCount = getUnreadAlertCount(alerts);
+  const backendIsOnline = backendStatus === "online";
+  const backendLabel =
+    backendStatus === "checking"
+      ? "Checking backend…"
+      : backendIsOnline
+        ? "Backend Online"
+        : "Backend Unavailable";
   const recentAlerts = [...alerts]
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 4)
+    .slice(0, 4);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
-        setIsAlertMenuOpen(false)
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target)
+      ) {
+        setIsAlertMenuOpen(false);
       }
-    }
+    };
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleAlertClick = (alert) => {
-    onMarkAlertAsRead?.(alert.id)
-    setSelectedAlert(alert)
-    setIsAlertMenuOpen(false)
-  }
+    onMarkAlertAsRead?.(alert.id);
+    setSelectedAlert(alert);
+    setIsAlertMenuOpen(false);
+  };
 
   const handleViewAllAlerts = () => {
-    setIsAlertMenuOpen(false)
-    navigate('/security-alerts')
-  }
+    setIsAlertMenuOpen(false);
+    navigate("/security-alerts");
+  };
 
   return (
     <header className="flex items-center justify-between gap-4 border-b border-[#dfe7ef] bg-[#f3f6f8] px-3 pb-4 pt-1 sm:px-4 sm:pb-5 lg:px-5">
       <div>
-        <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-slate-800">{title}</h1>
+        <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-slate-800">
+          {title}
+        </h1>
         <p className="mt-1 text-sm text-slate-500 sm:text-base">{subtitle}</p>
       </div>
 
       <div className="flex items-center gap-3" ref={containerRef}>
+        <div
+          className={`flex items-center gap-1.5 rounded-xl border px-2 py-2 text-[10px] font-semibold sm:gap-2 sm:px-3 sm:text-xs ${backendIsOnline ? "border-emerald-200 bg-emerald-50 text-emerald-800" : backendStatus === "offline" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-500"}`}
+          role="status"
+          aria-label={backendLabel}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${backendIsOnline ? "bg-emerald-500" : backendStatus === "offline" ? "bg-red-500" : "bg-slate-400"}`}
+          />
+          {backendLabel}
+        </div>
         <div className="relative">
           <button
             type="button"
@@ -60,7 +83,13 @@ export default function Header({
             onClick={() => setIsAlertMenuOpen((current) => !current)}
             className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-[#dfe7ef] bg-white text-slate-500 transition-colors hover:bg-slate-50"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              className="h-4 w-4"
+            >
               <path d="M15 17h5l-1.4-1.4A2.1 2.1 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
               <path d="M10 20a2 2 0 0 0 4 0" />
             </svg>
@@ -108,21 +137,27 @@ export default function Header({
                     >
                       <span
                         className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                          alert.read ? 'bg-slate-300' : 'bg-red-500'
+                          alert.read ? "bg-slate-300" : "bg-red-500"
                         }`}
                       />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${getSeverityTone(alert.severity)}`}>
+                          <span
+                            className={`inline-flex rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${getSeverityTone(alert.severity)}`}
+                          >
                             {alert.severity}
                           </span>
                           <span className="text-[11px] text-slate-400">
                             {formatRelativeTime(alert.timestamp)}
                           </span>
                         </div>
-                        <p className="mt-1 text-sm font-semibold text-slate-700">{alert.title}</p>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{alert.description}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-700">
+                          {alert.title}
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">
+                          {alert.description}
+                        </p>
                       </div>
                     </button>
                   ))
@@ -146,7 +181,9 @@ export default function Header({
             A
           </div>
           <div className="hidden min-w-0 sm:block">
-            <div className="text-sm font-semibold text-slate-800">Administrator</div>
+            <div className="text-sm font-semibold text-slate-800">
+              Administrator
+            </div>
           </div>
         </div>
       </div>
@@ -159,7 +196,9 @@ export default function Header({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Security alert
                 </p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-800">{selectedAlert.title}</h3>
+                <h3 className="mt-1 text-xl font-semibold text-slate-800">
+                  {selectedAlert.title}
+                </h3>
               </div>
               <button
                 type="button"
@@ -176,7 +215,9 @@ export default function Header({
                 <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Alert ID
                 </span>
-                <span className="text-base font-semibold text-slate-800">{selectedAlert.id}</span>
+                <span className="text-base font-semibold text-slate-800">
+                  {selectedAlert.id}
+                </span>
               </div>
 
               <div className="rounded-xl border border-dashed border-slate-200 p-3">
@@ -188,7 +229,9 @@ export default function Header({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Severity
                   </p>
-                  <span className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getSeverityTone(selectedAlert.severity)}`}>
+                  <span
+                    className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getSeverityTone(selectedAlert.severity)}`}
+                  >
                     {selectedAlert.severity}
                   </span>
                 </div>
@@ -196,7 +239,9 @@ export default function Header({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Status
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedAlert.status}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedAlert.status}
+                  </p>
                 </div>
               </div>
             </div>
@@ -204,5 +249,5 @@ export default function Header({
         </div>
       )}
     </header>
-  )
+  );
 }
