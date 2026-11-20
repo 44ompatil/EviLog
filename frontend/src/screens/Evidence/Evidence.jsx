@@ -1,22 +1,30 @@
-import { useEffect, useMemo, useState } from 'react'
-import DeleteConfirmationDialog from '../../components/DeleteConfirmationDialog'
-import FilterPopover from '../../components/FilterPopover'
-import CasesToolbar from '../../components/CasesToolbar'
-import EvidenceTable from '../../components/EvidenceTable'
+import { useEffect, useMemo, useState } from "react";
+import DeleteConfirmationDialog from "../../components/DeleteConfirmationDialog";
+import FilterPopover from "../../components/FilterPopover";
+import CasesToolbar from "../../components/CasesToolbar";
+import EvidenceTable from "../../components/EvidenceTable";
+import { isRfidAvailable } from "../../services/adapters";
 
-const statusOptions = ['All', 'Stored', 'Checked Out']
-const typeOptions = ['All', 'Digital', 'Weapon', 'Biological', 'Document', 'Physical']
+const statusOptions = ["All", "Stored", "Checked Out"];
+const typeOptions = [
+  "All",
+  "Digital",
+  "Weapon",
+  "Biological",
+  "Document",
+  "Physical",
+];
 
 const resolveOfficerDisplay = (value, officers = []) => {
-  if (!value) return value
-  const exactMatch = officers.find((entry) => entry.id === String(value))
-  if (exactMatch) return `${exactMatch.id} · ${exactMatch.name}`
-  const officerIdMatch = String(value).match(/OF-\d+/)
-  if (!officerIdMatch) return value
+  if (!value) return value;
+  const exactMatch = officers.find((entry) => entry.id === String(value));
+  if (exactMatch) return `${exactMatch.id} · ${exactMatch.name}`;
+  const officerIdMatch = String(value).match(/OF-\d+/);
+  if (!officerIdMatch) return value;
 
-  const officer = officers.find((entry) => entry.id === officerIdMatch[0])
-  return officer ? `${officerIdMatch[0]} · ${officer.name}` : officerIdMatch[0]
-}
+  const officer = officers.find((entry) => entry.id === officerIdMatch[0]);
+  return officer ? `${officerIdMatch[0]} · ${officer.name}` : officerIdMatch[0];
+};
 
 export default function Evidence({
   evidence = [],
@@ -29,59 +37,71 @@ export default function Evidence({
   onUpdateEvidence,
   onDeleteEvidence,
 }) {
-  const [activeEvidenceId, setActiveEvidenceId] = useState(null)
-  const [activeRfidId, setActiveRfidId] = useState(null)
-  const [search, setSearch] = useState('')
-  const [selectedStatus, setSelectedStatus] = useState('All')
-  const [selectedType, setSelectedType] = useState('All')
-  const [filterOpen, setFilterOpen] = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
-  const [editTarget, setEditTarget] = useState(null)
-  const [actionError, setActionError] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [activeEvidenceId, setActiveEvidenceId] = useState(null);
+  const [activeRfidId, setActiveRfidId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [selectedType, setSelectedType] = useState("All");
+  const [filterOpen, setFilterOpen] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const availableRfidOptions = useMemo(
-    () => rfidTags.filter((tag) => String(tag.status).toLowerCase() === 'available').map((tag) => tag.rfid_id),
+    () => rfidTags.filter(isRfidAvailable).map((tag) => tag.rfid_id),
     [rfidTags],
-  )
+  );
 
   const filteredEvidence = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = search.trim().toLowerCase();
 
     return evidence.filter((item) => {
       const matchesSearch =
         query.length === 0 ||
-        [item.id, item.caseId, item.name, item.type, item.rfid].join(' ').toLowerCase().includes(query)
+        [item.id, item.caseId, item.name, item.type, item.rfid]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
 
-      const matchesStatus = selectedStatus === 'All' || item.status === selectedStatus
-      const matchesType = selectedType === 'All' || item.type === selectedType
+      const matchesStatus =
+        selectedStatus === "All" || item.status === selectedStatus;
+      const matchesType = selectedType === "All" || item.type === selectedType;
 
-      return matchesSearch && matchesStatus && matchesType
-    })
-  }, [evidence, search, selectedStatus, selectedType])
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [evidence, search, selectedStatus, selectedType]);
 
   const selectedEvidence = useMemo(
     () => evidence.find((item) => item.id === activeEvidenceId) || null,
     [evidence, activeEvidenceId],
-  )
+  );
 
   useEffect(() => {
-    if (!['evidence', 'rfid'].includes(openEntitySignal?.type)) return undefined
+    if (!["evidence", "rfid"].includes(openEntitySignal?.type))
+      return undefined;
     const frame = requestAnimationFrame(() => {
-      if (openEntitySignal.type === 'evidence') setActiveEvidenceId(openEntitySignal.id)
-      if (openEntitySignal.type === 'rfid') setActiveRfidId(openEntitySignal.id)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [openEntitySignal])
+      if (openEntitySignal.type === "evidence")
+        setActiveEvidenceId(openEntitySignal.id);
+      if (openEntitySignal.type === "rfid")
+        setActiveRfidId(openEntitySignal.id);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [openEntitySignal]);
 
-  const selectedRfid = rfidTags.find((tag) => tag.rfid_id === activeRfidId) || null
+  const selectedRfid =
+    rfidTags.find((tag) => tag.rfid_id === activeRfidId) || null;
   const rfidHistory = rfidMappings
     .filter((mapping) => mapping.rfid_id === activeRfidId)
-    .sort((left, right) => new Date(right.assigned_at) - new Date(left.assigned_at))
-  const currentRfidEvidence = evidence.find((entry) => entry.rfid === activeRfidId)
+    .sort(
+      (left, right) => new Date(right.assigned_at) - new Date(left.assigned_at),
+    );
+  const currentRfidEvidence = evidence.find(
+    (entry) => entry.rfid === activeRfidId,
+  );
 
-  const closeEvidenceDetails = () => setActiveEvidenceId(null)
+  const closeEvidenceDetails = () => setActiveEvidenceId(null);
 
   return (
     <div className="w-full bg-[#f3f6f8]">
@@ -93,48 +113,54 @@ export default function Evidence({
         onRegisterCase={onRegisterEvidence}
         filterLabel="Filter"
         isFilterOpen={filterOpen !== null}
-        onToggleFilter={() => setFilterOpen((current) => (current ? null : 'status'))}
+        onToggleFilter={() =>
+          setFilterOpen((current) => (current ? null : "status"))
+        }
         filterButton={({ isOpen }) => (
           <FilterPopover
             isOpen={isOpen}
             title="Evidence filters"
             groups={[
               {
-                label: 'Status',
+                label: "Status",
                 options: statusOptions,
                 selectedValue: selectedStatus,
                 onSelect: (value) => {
-                  setSelectedStatus(value)
-                  setFilterOpen(null)
+                  setSelectedStatus(value);
+                  setFilterOpen(null);
                 },
               },
               {
-                label: 'Type',
+                label: "Type",
                 options: typeOptions,
                 selectedValue: selectedType,
                 onSelect: (value) => {
-                  setSelectedType(value)
-                  setFilterOpen(null)
+                  setSelectedType(value);
+                  setFilterOpen(null);
                 },
               },
             ]}
             onClear={() => {
-              setSelectedStatus('All')
-              setSelectedType('All')
-              setFilterOpen(null)
+              setSelectedStatus("All");
+              setSelectedType("All");
+              setFilterOpen(null);
             }}
             onClose={() => setFilterOpen(null)}
           />
         )}
       />
 
-      {actionError && <p className="mx-4 text-sm text-red-600" role="alert">{actionError}</p>}
+      {actionError && (
+        <p className="mx-4 text-sm text-red-600" role="alert">
+          {actionError}
+        </p>
+      )}
 
       <div className="p-3 sm:p-4 lg:p-5">
         <EvidenceTable
           rows={filteredEvidence}
           onOpenEvidence={(id) => setActiveEvidenceId(id)}
-          onOpenCase={(id) => onOpenEntity?.('case', id)}
+          onOpenCase={(id) => onOpenEntity?.("case", id)}
           onOpenRfid={setActiveRfidId}
           onEdit={(row) => setEditTarget(row)}
           onDelete={(row) => setDeleteTarget(row)}
@@ -145,7 +171,7 @@ export default function Evidence({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]"
           onClick={(event) => {
-            if (event.target === event.currentTarget) closeEvidenceDetails()
+            if (event.target === event.currentTarget) closeEvidenceDetails();
           }}
         >
           <div className="max-h-[92vh] w-full max-w-[980px] overflow-y-auto rounded-[22px] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
@@ -189,45 +215,84 @@ export default function Evidence({
             <div className="rounded-[18px] border border-[#dfe7ef] bg-[#f8fafc] p-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Evidence ID</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.id}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Evidence ID
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedEvidence.id}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Evidence Name</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.name}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Evidence Name
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedEvidence.name}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Case ID</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Case ID
+                  </p>
                   <button
                     type="button"
-                    onClick={() => onOpenEntity?.('case', selectedEvidence.caseId)}
+                    onClick={() =>
+                      onOpenEntity?.("case", selectedEvidence.caseId)
+                    }
                     className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
                   >
                     {selectedEvidence.caseId}
                   </button>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Evidence Type</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.type}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Evidence Type
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedEvidence.type}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Assigned RFID</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Assigned RFID
+                  </p>
                   {selectedEvidence.rfid ? (
-                    <button type="button" onClick={() => setActiveRfidId(selectedEvidence.rfid)} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{selectedEvidence.rfid}</button>
-                  ) : <p className="mt-2 text-sm font-semibold text-slate-800">Not Assigned</p>}
+                    <button
+                      type="button"
+                      onClick={() => setActiveRfidId(selectedEvidence.rfid)}
+                      className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
+                    >
+                      {selectedEvidence.rfid}
+                    </button>
+                  ) : (
+                    <p className="mt-2 text-sm font-semibold text-slate-800">
+                      Not Assigned
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Status</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.status}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Status
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedEvidence.status}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Registered</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-800">{selectedEvidence.registered || '—'}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Registered
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {selectedEvidence.registered || "—"}
+                  </p>
                 </div>
                 <div className="rounded-xl border border-[#e6edf4] bg-white p-3 md:col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Description</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    Description
+                  </p>
                   <p className="mt-2 text-sm leading-6 text-slate-700">
-                    {selectedEvidence.description || 'No additional description provided.'}
+                    {selectedEvidence.description ||
+                      "No additional description provided."}
                   </p>
                 </div>
               </div>
@@ -239,31 +304,41 @@ export default function Evidence({
               </p>
               <div className="space-y-4 border-l border-[#dfe7ef] pl-4">
                 {(selectedEvidence.custodyHistory || []).map((event, index) => {
-                  const isLatest = index === (selectedEvidence.custodyHistory || []).length - 1
-                  const eventText = event.actor ? resolveOfficerDisplay(event.actor, officers) : event.actor || 'System'
+                  const isLatest =
+                    index ===
+                    (selectedEvidence.custodyHistory || []).length - 1;
+                  const eventText = event.actor
+                    ? resolveOfficerDisplay(event.actor, officers)
+                    : event.actor || "System";
 
                   return (
-                    <div key={`${event.type}-${event.date}-${index}`} className="relative">
+                    <div
+                      key={`${event.type}-${event.date}-${index}`}
+                      className="relative"
+                    >
                       <div className="absolute -left-[1.13rem] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-[#1f5e52] shadow-sm" />
                       <div
                         className={`rounded-xl border p-3 ${
                           isLatest
-                            ? 'border-[#dbeafe] bg-[#eff6ff] shadow-sm'
-                            : 'border-[#eaeef3] bg-[#f8fafc]'
+                            ? "border-[#dbeafe] bg-[#eff6ff] shadow-sm"
+                            : "border-[#eaeef3] bg-[#f8fafc]"
                         }`}
                       >
                         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-sm font-semibold text-slate-800">{event.type}</p>
+                          <p className="text-sm font-semibold text-slate-800">
+                            {event.type}
+                          </p>
                           <p className="text-[11px] uppercase tracking-[0.08em] text-slate-500">
-                            {event.date} · {event.time || '00:00'}
+                            {event.date} · {event.time || "00:00"}
                           </p>
                         </div>
                         <p className="mt-2 text-sm text-slate-600">
-                          {eventText} {event.details ? `· ${event.details}` : ''}
+                          {eventText}{" "}
+                          {event.details ? `· ${event.details}` : ""}
                         </p>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -272,12 +347,21 @@ export default function Evidence({
       )}
 
       {selectedRfid && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]" onClick={(event) => { if (event.target === event.currentTarget) setActiveRfidId(null) }}>
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[1px]"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setActiveRfidId(null);
+          }}
+        >
           <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">RFID details and history</p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-800">{selectedRfid.rfid_id}</h3>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  RFID details and history
+                </p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-800">
+                  {selectedRfid.rfid_id}
+                </h3>
               </div>
               <button
                 type="button"
@@ -290,18 +374,84 @@ export default function Evidence({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Current Status</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedRfid.status}</p></div>
-              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Registered</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedRfid.registered_at ? new Date(selectedRfid.registered_at).toLocaleString() : '—'}</p></div>
-              <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2"><p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Currently Assigned Evidence</p>{currentRfidEvidence ? <button type="button" onClick={() => { setActiveRfidId(null); onOpenEntity?.('evidence', currentRfidEvidence.id) }} className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{currentRfidEvidence.id} · {currentRfidEvidence.name}</button> : <p className="mt-2 text-sm text-slate-600">Not currently assigned</p>}</div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  Current Status
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  {selectedRfid.status}
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  Registered
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  {selectedRfid.registered_at
+                    ? new Date(selectedRfid.registered_at).toLocaleString()
+                    : "—"}
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  Currently Assigned Evidence
+                </p>
+                {currentRfidEvidence ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveRfidId(null);
+                      onOpenEntity?.("evidence", currentRfidEvidence.id);
+                    }}
+                    className="mt-2 text-sm font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
+                  >
+                    {currentRfidEvidence.id} · {currentRfidEvidence.name}
+                  </button>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">
+                    Not currently assigned
+                  </p>
+                )}
+              </div>
               <div className="rounded-xl border border-slate-200 p-3 sm:col-span-2">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Assignment History</p>
-                {rfidHistory.length ? rfidHistory.map((mapping) => (
-                  <div key={mapping.mapping_id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2 first:border-0">
-                    <button type="button" onClick={() => { setActiveRfidId(null); onOpenEntity?.('evidence', mapping.evidence_id) }} className="font-semibold text-[#1f5ea8] underline-offset-2 hover:underline">{mapping.evidence_id}</button>
-                    <span className="text-xs text-slate-500">Assigned {new Date(mapping.assigned_at).toLocaleString()}</span>
-                    <span className="text-xs text-slate-500">{mapping.released_at ? `Released ${new Date(mapping.released_at).toLocaleString()}` : selectedRfid.status === 'assigned' && currentRfidEvidence?.id === mapping.evidence_id ? 'Current assignment' : 'Assignment record'}</span>
-                  </div>
-                )) : <p className="text-sm text-slate-500">No assignment history is recorded.</p>}
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Assignment History
+                </p>
+                {rfidHistory.length ? (
+                  rfidHistory.map((mapping) => (
+                    <div
+                      key={mapping.mapping_id}
+                      className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 py-2 first:border-0"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveRfidId(null);
+                          onOpenEntity?.("evidence", mapping.evidence_id);
+                        }}
+                        className="font-semibold text-[#1f5ea8] underline-offset-2 hover:underline"
+                      >
+                        {mapping.evidence_id}
+                      </button>
+                      <span className="text-xs text-slate-500">
+                        Assigned{" "}
+                        {new Date(mapping.assigned_at).toLocaleString()}
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {mapping.released_at
+                          ? `Released ${new Date(mapping.released_at).toLocaleString()}`
+                          : selectedRfid.status === "assigned" &&
+                              currentRfidEvidence?.id === mapping.evidence_id
+                            ? "Current assignment"
+                            : "Assignment record"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No assignment history is recorded.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -316,7 +466,9 @@ export default function Evidence({
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Edit evidence
                 </p>
-                <h3 className="mt-1 text-xl font-semibold text-slate-800">Edit Evidence</h3>
+                <h3 className="mt-1 text-xl font-semibold text-slate-800">
+                  Edit Evidence
+                </h3>
               </div>
               <button
                 type="button"
@@ -328,7 +480,11 @@ export default function Evidence({
               </button>
             </div>
 
-            {actionError && <p className="mb-3 text-sm text-red-600" role="alert">{actionError}</p>}
+            {actionError && (
+              <p className="mb-3 text-sm text-red-600" role="alert">
+                {actionError}
+              </p>
+            )}
 
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
@@ -358,7 +514,9 @@ export default function Evidence({
                   </label>
                   <input
                     value={editTarget.name}
-                    onChange={(event) => setEditTarget({ ...editTarget, name: event.target.value })}
+                    onChange={(event) =>
+                      setEditTarget({ ...editTarget, name: event.target.value })
+                    }
                     className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                   />
                 </div>
@@ -368,14 +526,18 @@ export default function Evidence({
                   </label>
                   <select
                     value={editTarget.type}
-                    onChange={(event) => setEditTarget({ ...editTarget, type: event.target.value })}
+                    onChange={(event) =>
+                      setEditTarget({ ...editTarget, type: event.target.value })
+                    }
                     className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                   >
-                    {typeOptions.filter((item) => item !== 'All').map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
+                    {typeOptions
+                      .filter((item) => item !== "All")
+                      .map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -385,8 +547,13 @@ export default function Evidence({
                   Description
                 </label>
                 <textarea
-                  value={editTarget.description || ''}
-                  onChange={(event) => setEditTarget({ ...editTarget, description: event.target.value })}
+                  value={editTarget.description || ""}
+                  onChange={(event) =>
+                    setEditTarget({
+                      ...editTarget,
+                      description: event.target.value,
+                    })
+                  }
                   rows={3}
                   className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                 />
@@ -399,15 +566,22 @@ export default function Evidence({
                   </label>
                   <select
                     value={editTarget.rfid}
-                    onChange={(event) => setEditTarget({ ...editTarget, rfid: event.target.value })}
+                    onChange={(event) =>
+                      setEditTarget({ ...editTarget, rfid: event.target.value })
+                    }
                     className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                   >
                     <option value="">Select RFID</option>
-                    {[editTarget.rfid, ...availableRfidOptions].filter((rfid, index, values) => rfid && values.indexOf(rfid) === index).map((rfid) => (
-                      <option key={rfid} value={rfid}>
-                        {rfid}
-                      </option>
-                    ))}
+                    {[editTarget.rfid, ...availableRfidOptions]
+                      .filter(
+                        (rfid, index, values) =>
+                          rfid && values.indexOf(rfid) === index,
+                      )
+                      .map((rfid) => (
+                        <option key={rfid} value={rfid}>
+                          {rfid}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <div>
@@ -416,14 +590,21 @@ export default function Evidence({
                   </label>
                   <select
                     value={editTarget.status}
-                    onChange={(event) => setEditTarget({ ...editTarget, status: event.target.value })}
+                    onChange={(event) =>
+                      setEditTarget({
+                        ...editTarget,
+                        status: event.target.value,
+                      })
+                    }
                     className="w-full rounded-xl border border-[#dfe7ef] bg-white px-3 py-2.5 text-sm text-slate-700"
                   >
-                    {statusOptions.filter((item) => item !== 'All').map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
+                    {statusOptions
+                      .filter((item) => item !== "All")
+                      .map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -434,7 +615,7 @@ export default function Evidence({
                 </label>
                 <input
                   readOnly
-                  value={editTarget.registered || editTarget.createdAt || ''}
+                  value={editTarget.registered || editTarget.createdAt || ""}
                   className="w-full rounded-xl border border-[#dfe7ef] bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
                 />
               </div>
@@ -451,26 +632,28 @@ export default function Evidence({
                   type="button"
                   disabled={isSaving}
                   onClick={async () => {
-                    setActionError('')
-                    setIsSaving(true)
+                    setActionError("");
+                    setIsSaving(true);
                     try {
                       await onUpdateEvidence?.({
-                      ...editTarget,
-                      name: editTarget.name.trim() || editTarget.name,
-                      type: editTarget.type,
-                      status: editTarget.status,
-                      rfid: editTarget.rfid,
-                    })
-                      setEditTarget(null)
+                        ...editTarget,
+                        name: editTarget.name.trim() || editTarget.name,
+                        type: editTarget.type,
+                        status: editTarget.status,
+                        rfid: editTarget.rfid,
+                      });
+                      setEditTarget(null);
                     } catch (error) {
-                      setActionError(error.message || 'Unable to update evidence.')
+                      setActionError(
+                        error.message || "Unable to update evidence.",
+                      );
                     } finally {
-                      setIsSaving(false)
+                      setIsSaving(false);
                     }
                   }}
                   className="rounded-xl bg-[#172c41] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#111f32] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSaving ? 'Saving…' : 'Save Changes'}
+                  {isSaving ? "Saving…" : "Save Changes"}
                 </button>
               </div>
             </div>
@@ -488,21 +671,21 @@ export default function Evidence({
           isSubmitting={isDeleting}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={async () => {
-            setActionError('')
-            setIsDeleting(true)
+            setActionError("");
+            setIsDeleting(true);
             try {
-              await onDeleteEvidence?.(deleteTarget.id)
-              setDeleteTarget(null)
-              closeEvidenceDetails()
+              await onDeleteEvidence?.(deleteTarget.id);
+              setDeleteTarget(null);
+              closeEvidenceDetails();
             } catch (error) {
-              setActionError(error.message || 'Unable to delete evidence.')
+              setActionError(error.message || "Unable to delete evidence.");
             } finally {
-              setIsDeleting(false)
+              setIsDeleting(false);
             }
           }}
           onClose={() => setDeleteTarget(null)}
         />
       )}
     </div>
-  )
+  );
 }

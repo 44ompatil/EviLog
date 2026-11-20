@@ -33,6 +33,7 @@ import {
   mapAlert,
   mapActivity,
   currentRfidAssignments,
+  isRfidAvailable,
 } from "../services/adapters";
 
 const screenMeta = {
@@ -152,26 +153,24 @@ export default function AppLayout() {
       const mappings = successful(mappingResult);
       const alertRecords = successful(alertResult);
       const transactionRecords = successful(transactionResult);
-      const failures = results
-        .slice(1)
-        .flatMap((result, index) =>
-          result.status === "rejected"
-            ? [
-                {
-                  name: [
-                    "Cases",
-                    "Evidence",
-                    "Officers",
-                    "RFID tags",
-                    "RFID mappings",
-                    "Security alerts",
-                    "Transactions",
-                  ][index],
-                  error: result.reason,
-                },
-              ]
-            : [],
-        );
+      const failures = results.slice(1).flatMap((result, index) =>
+        result.status === "rejected"
+          ? [
+              {
+                name: [
+                  "Cases",
+                  "Evidence",
+                  "Officers",
+                  "RFID tags",
+                  "RFID mappings",
+                  "Security alerts",
+                  "Transactions",
+                ][index],
+                error: result.reason,
+              },
+            ]
+          : [],
+      );
 
       if (evidenceRecords) {
         evidenceRecordsRef.current = evidenceRecords;
@@ -247,10 +246,7 @@ export default function AppLayout() {
   }, [refreshData]);
 
   const availableRfidOptions = useMemo(
-    () =>
-      rfidTags
-        .filter((tag) => String(tag.status).toLowerCase() === "available")
-        .map((tag) => tag.rfid_id),
+    () => rfidTags.filter(isRfidAvailable).map((tag) => tag.rfid_id),
     [rfidTags],
   );
   const navItems = sidebarItems.map((item) => ({
